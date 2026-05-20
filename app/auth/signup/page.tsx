@@ -15,15 +15,11 @@ export default function SignUp() {
     const handleSignUp = async () => {
         setLoading(true)
         setError('')
-
         const { error } = await supabase.auth.signUp({
             email,
             password,
-            options: {
-                data: { full_name: fullName }
-            }
+            options: { data: { full_name: fullName } }
         })
-
         if (error) {
             setError(error.message)
             setLoading(false)
@@ -33,13 +29,15 @@ export default function SignUp() {
     }
 
     return (
-        <main className="min-h-screen bg-[#0a0a12] text-white flex items-center justify-center px-6">
-            <div className="w-full max-w-md bg-[#111120] border border-gray-800 rounded-2xl p-8">
-                <h1 className="text-3xl font-black mb-1">Create account</h1>
-                <p className="text-gray-400 text-sm mb-8">Join StudyOS and study smarter</p>
+        <main className="min-h-screen flex items-center justify-center px-6" style={{ background: '#0d0d0a', color: '#fafaf5' }}>
+            <div className="w-full max-w-md rounded-2xl p-8 border" style={{ background: '#111110', borderColor: '#1f1f18' }}>
+
+                <span className="font-black text-lg tracking-tight">Study<span style={{ color: '#f59e0b' }}>OS</span></span>
+                <h1 className="text-3xl font-black mt-4 mb-1">Create account</h1>
+                <p className="text-sm mb-8" style={{ color: '#5a5a4a' }}>Join StudyOS and study smarter</p>
 
                 {error && (
-                    <div className="bg-red-500/10 border border-red-500/30 text-red-400 text-sm px-4 py-3 rounded-lg mb-6">
+                    <div className="text-sm px-4 py-3 rounded-lg mb-6" style={{ background: '#2a1010', border: '1px solid #5a2020', color: '#ff8080' }}>
                         {error}
                     </div>
                 )}
@@ -50,36 +48,38 @@ export default function SignUp() {
                         placeholder="Full name"
                         value={fullName}
                         onChange={(e) => setFullName(e.target.value)}
-                        className="bg-[#0a0a12] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-violet-500 transition-all"
+                        className="rounded-lg px-4 py-3 text-sm outline-none transition-all"
+                        style={{ background: '#0d0d0a', border: '1px solid #1f1f18', color: '#fafaf5' }}
                     />
                     <input
                         type="email"
                         placeholder="Email address"
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
-                        className="bg-[#0a0a12] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-violet-500 transition-all"
+                        className="rounded-lg px-4 py-3 text-sm outline-none transition-all"
+                        style={{ background: '#0d0d0a', border: '1px solid #1f1f18', color: '#fafaf5' }}
                     />
                     <input
                         type="password"
                         placeholder="Password"
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="bg-[#0a0a12] border border-gray-700 rounded-lg px-4 py-3 text-sm outline-none focus:border-violet-500 transition-all"
+                        className="rounded-lg px-4 py-3 text-sm outline-none transition-all"
+                        style={{ background: '#0d0d0a', border: '1px solid #1f1f18', color: '#fafaf5' }}
                     />
                     <button
                         onClick={handleSignUp}
                         disabled={loading}
-                        className="bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-bold py-3 rounded-lg transition-all mt-2"
+                        className="font-bold py-3 rounded-lg transition-all mt-2 text-[#0d0d0a]"
+                        style={{ background: loading ? '#a06b00' : '#f59e0b' }}
                     >
                         {loading ? 'Creating account...' : 'Create Account →'}
                     </button>
                 </div>
 
-                <p className="text-gray-500 text-sm text-center mt-6">
+                <p className="text-sm text-center mt-6" style={{ color: '#3a3a30' }}>
                     Already have an account?{' '}
-                    <a href="/auth/login" className="text-violet-400 hover:text-violet-300">
-                        Sign in
-                    </a>
+                    <a href="/auth/login" style={{ color: '#f59e0b' }}>Sign in</a>
                 </p>
             </div>
         </main>
