@@ -1,14 +1,29 @@
-import Groq from 'groq-sdk'
 import { NextRequest, NextResponse } from 'next/server'
+import Groq from 'groq-sdk'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
 export async function POST(req: NextRequest) {
   try {
-    const { text } = await req.json()
+    const formData = await req.formData()
+    const file = formData.get('pdf') as File
 
-    if (!text || text.trim().length < 10) {
-      return NextResponse.json({ error: 'Please provide some text to analyze' }, { status: 400 })
+    if (!file) {
+      return NextResponse.json({ error: 'No PDF provided' }, { status: 400 })
+    }
+
+    const arrayBuffer = await file.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    // Dynamic require to avoid ESM issues
+    const pdf = (await import('pdf-parse')).default
+    const pdfData = await pdf(buffer)
+    const text = pdfData.text
+
+    if (!text || text.trim().length < 50) {
+      return NextResponse.json({ 
+        error: 'Could not extract text. Make sure your PDF is text-based not a scanned image.' 
+      }, { status: 400 })
     }
 
     const completion = await groq.chat.completions.create({
@@ -17,29 +32,28 @@ export async function POST(req: NextRequest) {
       messages: [
         {
           role: 'system',
-          content: 'You are an expert study assistant who creates clear, structured study summaries from lecture notes.'
+          content: 'You are an expert study assistant who creates clear structured study summaries.'
         },
         {
           role: 'user',
           content: `Analyze these lecture notes and create a comprehensive study summary.
 
-Structure your response exactly like this:
 ## Overview
-[2-3 sentence overview of the topic]
+[2-3 sentence overview]
 
 ## Key Concepts
-[List the 5-8 most important concepts with brief explanations]
+[5-8 most important concepts]
 
 ## Important Definitions
-[List key terms and their definitions]
+[Key terms and definitions]
 
 ## Key Points to Remember
-[Bullet points of the most critical facts to memorize]
+[Critical facts to memorize]
 
 ## Exam Tips
-[2-3 tips on what to focus on for exams]
+[2-3 exam focus tips]
 
-Here are the notes:
+Notes:
 ${text.slice(0, 6000)}`
         }
       ]

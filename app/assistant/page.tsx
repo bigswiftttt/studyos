@@ -3,25 +3,37 @@
 import { useState } from 'react'
 
 export default function Assistant() {
+  const [file, setFile] = useState<File | null>(null)
   const [activeTab, setActiveTab] = useState('summary')
+  const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState('')
   const [error, setError] = useState('')
   const [step, setStep] = useState('')
-  const [notes, setNotes] = useState('')
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    const dropped = e.dataTransfer.files[0]
+    if (dropped?.type === 'application/pdf') setFile(dropped)
+  }
 
   const generate = async () => {
-    if (!notes.trim()) return
+    if (!file) return
     setLoading(true)
     setError('')
     setSummary('')
 
     try {
+      setStep('📄 Extracting text from PDF...')
+      
+      const formData = new FormData()
+      formData.append('pdf', file)
+
       setStep('🤖 AI is analyzing your notes...')
       const res = await fetch('/api/summarize', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: notes })
+        body: formData
       })
 
       const data = await res.json()
@@ -45,45 +57,56 @@ export default function Assistant() {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-3xl font-black tracking-tight">🤖 AI Study Assistant</h1>
-            <p className="mt-1 text-sm" style={{color: '#5a5a4a'}}>Paste your notes and get instant study materials</p>
+            <p className="mt-1 text-sm" style={{color: '#5a5a4a'}}>Upload your PDF notes, get instant study materials</p>
           </div>
           <a href="/dashboard" className="text-sm font-bold" style={{color: '#f59e0b'}}>← Dashboard</a>
         </div>
 
-        {/* Notes Input */}
-        <div className="rounded-2xl border mb-6" style={{background: '#111110', borderColor: '#1f1f18'}}>
-          <div className="flex items-center justify-between px-4 pt-4 pb-2">
-            <p className="text-sm font-bold" style={{color: '#5a5a4a'}}>📝 Paste your lecture notes here</p>
-            <span className="text-xs font-mono" style={{color: '#3a3a30'}}>{notes.length} chars</span>
-          </div>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Paste your lecture notes, textbook content, or any study material here...
-
-Tip: Open your PDF → Select All (Ctrl+A) → Copy (Ctrl+C) → Paste here"
-            className="w-full rounded-b-2xl p-4 text-sm outline-none resize-none"
-            style={{
-              background: '#111110',
-              color: '#fafaf5',
-              minHeight: '200px',
-              border: 'none'
-            }}
+        {/* Upload Zone */}
+        <div
+          onDrop={handleDrop}
+          onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+          onDragLeave={() => setDragging(false)}
+          onClick={() => document.getElementById('fileInput')?.click()}
+          className="rounded-2xl border-2 border-dashed p-12 text-center cursor-pointer transition-all mb-6"
+          style={{
+            borderColor: dragging ? '#f59e0b' : '#1f1f18',
+            background: dragging ? 'rgba(245,158,11,0.05)' : '#111110'
+          }}
+        >
+          <input
+            id="fileInput"
+            type="file"
+            accept=".pdf"
+            className="hidden"
+            onChange={(e) => setFile(e.target.files?.[0] || null)}
           />
+          <div className="text-4xl mb-4">📄</div>
+          {file ? (
+            <div>
+              <p className="font-bold text-lg" style={{color: '#f59e0b'}}>{file.name}</p>
+              <p className="text-sm mt-1" style={{color: '#5a5a4a'}}>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF ready</p>
+            </div>
+          ) : (
+            <div>
+              <p className="font-bold text-lg">Drop your PDF here</p>
+              <p className="text-sm mt-1" style={{color: '#5a5a4a'}}>or click to browse · PDF files only</p>
+            </div>
+          )}
         </div>
 
         {/* Generate Button */}
         <button
           onClick={generate}
-          disabled={!notes.trim() || loading}
+          disabled={!file || loading}
           className="w-full font-bold py-4 rounded-xl text-lg mb-8 transition-all"
           style={{
-            background: notes.trim() && !loading ? '#f59e0b' : '#1f1f18',
-            color: notes.trim() && !loading ? '#0d0d0a' : '#3a3a30',
-            cursor: notes.trim() && !loading ? 'pointer' : 'not-allowed'
+            background: file && !loading ? '#f59e0b' : '#1f1f18',
+            color: file && !loading ? '#0d0d0a' : '#3a3a30',
+            cursor: file && !loading ? 'pointer' : 'not-allowed'
           }}
         >
-          {loading ? step || 'Generating...' : notes.trim() ? 'Generate Study Materials →' : 'Paste your notes to get started'}
+          {loading ? step || 'Generating...' : file ? 'Generate Study Materials →' : 'Upload a PDF to get started'}
         </button>
 
         {error && (
@@ -125,7 +148,7 @@ Tip: Open your PDF → Select All (Ctrl+A) → Copy (Ctrl+C) → Paste here"
             ) : (
               <div className="text-center">
                 <p className="text-4xl mb-4">📝</p>
-                <p className="font-bold" style={{color: '#5a5a4a'}}>Paste your notes and click Generate to see your summary here</p>
+                <p className="font-bold" style={{color: '#5a5a4a'}}>Upload a PDF and click Generate to see your summary here</p>
               </div>
             )
           )}
