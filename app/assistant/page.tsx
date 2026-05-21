@@ -8,6 +8,9 @@ export default function Assistant() {
   const [dragging, setDragging] = useState(false)
   const [loading, setLoading] = useState(false)
   const [summary, setSummary] = useState('')
+  const [flashcards, setFlashcards] = useState<{front: string, back: string}[]>([])
+  const [currentCard, setCurrentCard] = useState(0)
+  const [flipped, setFlipped] = useState(false)
   const [error, setError] = useState('')
   const [step, setStep] = useState('')
 
@@ -23,23 +26,35 @@ export default function Assistant() {
     setLoading(true)
     setError('')
     setSummary('')
+    setFlashcards([])
+    setCurrentCard(0)
+    setFlipped(false)
 
     try {
+      // Generate Summary
       setStep('📄 Extracting text from PDF...')
-      
-      const formData = new FormData()
-      formData.append('pdf', file)
-
-      setStep('🤖 AI is analyzing your notes...')
-      const res = await fetch('/api/summarize', {
+      const formData1 = new FormData()
+      formData1.append('pdf', file)
+      const summaryRes = await fetch('/api/summarize', {
         method: 'POST',
-        body: formData
+        body: formData1
       })
+      const summaryData = await summaryRes.json()
+      if (summaryData.error) throw new Error(summaryData.error)
+      setSummary(summaryData.summary)
 
-      const data = await res.json()
-      if (data.error) throw new Error(data.error)
+      // Generate Flashcards
+      setStep('🃏 Generating flashcards...')
+      const formData2 = new FormData()
+      formData2.append('pdf', file)
+      const flashRes = await fetch('/api/flashcards', {
+        method: 'POST',
+        body: formData2
+      })
+      const flashData = await flashRes.json()
+      if (flashData.error) throw new Error(flashData.error)
+      setFlashcards(flashData.flashcards)
 
-      setSummary(data.summary)
       setActiveTab('summary')
       setStep('')
     } catch (err: any) {
@@ -129,12 +144,17 @@ export default function Assistant() {
               }}
             >
               {tab === 'examquestions' ? 'Exam Questions' : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              {tab === 'flashcards' && flashcards.length > 0 && (
+                <span className="ml-2 text-xs">({flashcards.length})</span>
+              )}
             </button>
           ))}
         </div>
 
         {/* Tab Content */}
         <div className="rounded-2xl border p-8" style={{background: '#111110', borderColor: '#1f1f18'}}>
+
+          {/* Summary Tab */}
           {activeTab === 'summary' && (
             summary ? (
               <div className="max-w-none">
@@ -153,18 +173,90 @@ export default function Assistant() {
             )
           )}
 
-          {activeTab !== 'summary' && (
+          {/* Flashcards Tab */}
+          {activeTab === 'flashcards' && (
+            flashcards.length > 0 ? (
+              <div>
+                {/* Card Counter */}
+                <div className="flex items-center justify-between mb-6">
+                  <p className="text-sm font-mono" style={{color: '#5a5a4a'}}>
+                    Card {currentCard + 1} of {flashcards.length}
+                  </p>
+                  <p className="text-xs" style={{color: '#3a3a30'}}>Click card to flip</p>
+                </div>
+
+                {/* Flashcard */}
+                <div
+                  onClick={() => setFlipped(!flipped)}
+                  className="rounded-2xl p-10 text-center cursor-pointer transition-all mb-6 min-h-48 flex items-center justify-center"
+                  style={{
+                    background: flipped ? '#1a1a0f' : '#0d0d0a',
+                    border: `2px solid ${flipped ? '#f59e0b' : '#2a2a20'}`,
+                    minHeight: '200px'
+                  }}
+                >
+                  <div>
+                    <p className="text-xs font-mono mb-4" style={{color: '#3a3a30'}}>
+                      {flipped ? '✓ ANSWER' : '? QUESTION'}
+                    </p>
+                    <p className="text-lg font-bold leading-relaxed" style={{color: flipped ? '#f59e0b' : '#fafaf5'}}>
+                      {flipped ? flashcards[currentCard].back : flashcards[currentCard].front}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Navigation */}
+                <div className="flex gap-3 justify-center">
+                  <button
+                    onClick={() => { setCurrentCard(Math.max(0, currentCard - 1)); setFlipped(false) }}
+                    disabled={currentCard === 0}
+                    className="px-6 py-2 rounded-lg font-bold text-sm transition-all"
+                    style={{
+                      background: currentCard === 0 ? '#1a1a14' : '#1f1f18',
+                      color: currentCard === 0 ? '#3a3a30' : '#8a8a7a'
+                    }}
+                  >
+                    ← Prev
+                  </button>
+                  <button
+                    onClick={() => { setFlipped(false); setCurrentCard(0) }}
+                    className="px-6 py-2 rounded-lg font-bold text-sm"
+                    style={{background: '#1f1f18', color: '#8a8a7a'}}
+                  >
+                    Restart
+                  </button>
+                  <button
+                    onClick={() => { setCurrentCard(Math.min(flashcards.length - 1, currentCard + 1)); setFlipped(false) }}
+                    disabled={currentCard === flashcards.length - 1}
+                    className="px-6 py-2 rounded-lg font-bold text-sm transition-all"
+                    style={{
+                      background: currentCard === flashcards.length - 1 ? '#1a1a14' : '#f59e0b',
+                      color: currentCard === flashcards.length - 1 ? '#3a3a30' : '#0d0d0a'
+                    }}
+                  >
+                    Next →
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center">
+                <p className="text-4xl mb-4">🃏</p>
+                <p className="font-bold" style={{color: '#5a5a4a'}}>Upload a PDF and click Generate to see flashcards here</p>
+              </div>
+            )
+          )}
+
+          {/* MCQs + Exam Questions placeholders */}
+          {(activeTab === 'mcqs' || activeTab === 'examquestions') && (
             <div className="text-center">
-              <p className="text-4xl mb-4">
-                {activeTab === 'flashcards' ? '🃏' : activeTab === 'mcqs' ? '❓' : '🎯'}
-              </p>
+              <p className="text-4xl mb-4">{activeTab === 'mcqs' ? '❓' : '🎯'}</p>
               <p className="font-bold" style={{color: '#5a5a4a'}}>
-                {activeTab === 'examquestions' ? 'Exam Questions' : activeTab.charAt(0).toUpperCase() + activeTab.slice(1)} coming next!
+                {activeTab === 'mcqs' ? 'MCQ Quiz' : 'Exam Questions'} coming next!
               </p>
             </div>
           )}
-        </div>
 
+        </div>
       </div>
     </main>
   )
