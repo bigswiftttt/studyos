@@ -69,7 +69,7 @@ export default function Assistant() {
       {/* Nav */}
       <nav style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: '1rem 2rem', borderBottom: '1px solid #1f1f18',
+        padding: '0.85rem 1.25rem', borderBottom: '1px solid #1f1f18',
         position: 'sticky', top: 0, zIndex: 40,
         background: 'rgba(13,13,10,0.92)', backdropFilter: 'blur(12px)'
       }}>
@@ -85,9 +85,9 @@ export default function Assistant() {
 
         {/* Header */}
         <div style={{marginBottom: '2.5rem'}}>
-          <h1 style={{fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.025em', marginBottom: '0.4rem'}}>
-            AI Study Assistant
-          </h1>
+         <h1 style={{fontSize: 'clamp(1.25rem, 4vw, 1.75rem)', fontWeight: 800, letterSpacing: '-0.025em', marginBottom: '0.4rem'}}>
+  AI Study Assistant
+</h1>
           <p style={{fontSize: '0.85rem', color: '#5a5a4a'}}>
             Upload your lecture notes — get summaries, flashcards and exam materials instantly
           </p>
