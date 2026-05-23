@@ -30,31 +30,34 @@ export default function Login() {
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '1.5rem',
+      padding: '2rem 1.25rem',
       fontFamily: 'Inter, sans-serif'
     }}>
-      <div style={{width: '100%', maxWidth: '420px'}}>
+      <div style={{width: '100%', maxWidth: '420px', padding: '0 1rem', boxSizing: 'border-box'}}>
 
-        {/* Logo */}
-        <div style={{textAlign: 'center', marginBottom: '2.5rem'}}>
-          <span style={{fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.03em', color: '#f5f5f0'}}>
-            Study<span style={{color: '#f59e0b'}}>OS</span>
-          </span>
-        </div>
+  {/* Logo */}
+  <div style={{textAlign: 'center', marginBottom: '2.5rem'}}>
+    <span style={{fontWeight: 900, fontSize: '1.5rem', letterSpacing: '-0.03em', color: '#f5f5f0'}}>
+      Study<span style={{color: '#f59e0b'}}>OS</span>
+    </span>
+  </div>
 
-        {/* Card */}
-        <div style={{
-          background: '#111110',
-          border: '1px solid #1f1f18',
-          borderRadius: '16px',
-          padding: '2rem'
-        }}>
-          <h1 style={{
-            fontSize: '1.5rem',
-            fontWeight: 800,
-            letterSpacing: '-0.025em',
-            color: '#f5f5f0',
-            marginBottom: '0.35rem'
+  {/* Card */}
+  <div style={{
+    background: '#161612',
+    border: '1px solid #2a2a22',
+    borderRadius: '16px',
+    padding: '2rem',
+    width: '100%',
+    boxSizing: 'border-box'
+  }}>
+    <h1 style={{
+      fontSize: '1.5rem',
+      fontWeight: 800,
+      letterSpacing: '-0.025em',
+      color: '#f5f5f0',
+      marginBottom: '0.35rem'
+    }}>
           }}>Welcome back</h1>
           <p style={{fontSize: '0.85rem', color: '#5a5a4a', marginBottom: '1.75rem'}}>
             Sign in to your StudyOS account
