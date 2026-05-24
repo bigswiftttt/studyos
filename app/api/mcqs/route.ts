@@ -72,3 +72,7 @@ ${text.slice(0, 6000)}`
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }
+                      
+                               
+                        
+                           
