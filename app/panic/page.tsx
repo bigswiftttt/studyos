@@ -77,55 +77,24 @@ export default function PanicMode() {
             .map(t => t.replace(/^[-•*]\s*/, '').trim())
             .filter(Boolean)
 
-        const prompt = `You are an expert academic emergency planner. A student has a crisis exam situation. Generate a detailed survival plan.
-
-STUDENT SITUATION:
-- Exam: ${examName || 'Upcoming Exam'}
-- Days Until Exam: ${daysLeft}
-- Topics Remaining: ${topicList.join(', ')}
-- Confidence Level: ${confidence}
-- Hours Available Per Day: ${hoursPerDay}
-- Study Intensity: ${intensity || 'serious'}
-
-Respond ONLY with a valid JSON object (no markdown, no backticks, no preamble):
-{
-  "survivalAnalysis": "2-3 sentence intelligent overview of their situation and strategy",
-  "riskLevel": "one of: Low Risk | Moderate Risk | High Risk | Academic Near-Death Experience",
-  "priorityTopics": [
-    { "topic": "topic name", "priority": "high" | "medium" | "quick" }
-  ],
-  "dailyPlan": [
-    { "day": 1, "tasks": ["task 1", "task 2", "task 3"] }
-  ],
-  "focusSessions": "e.g. 4 × 50-minute sessions daily",
-  "motivationTip": "1-2 sentences of sharp, tactical study advice (not generic)"
-}
-
-Rules:
-- dailyPlan should cover ALL days until exam (max 14 days shown if more)
-- Each day should have 3-5 specific tasks based on the topics and hours available
-- priorityTopics should include ALL topics with appropriate priority levels
-- survivalAnalysis should be honest but reassuring
-- motivationTip should be specific and actionable, not generic
-- riskLevel should reflect reality given days and topics count`
-
         try {
             setStep('📊 Building your recovery plan...')
 
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
+            const res = await fetch('/api/panic-plan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    model: 'claude-sonnet-4-20250514',
-                    max_tokens: 1000,
-                    messages: [{ role: 'user', content: prompt }],
+                    examName,
+                    daysLeft,
+                    topicList,
+                    confidence,
+                    hoursPerDay,
+                    intensity,
                 }),
             })
 
-            const data = await response.json()
-            const text = data.content?.map((b: any) => b.text || '').join('') || ''
-            const clean = text.replace(/```json|```/g, '').trim()
-            const parsed = JSON.parse(clean)
+            const parsed = await res.json()
+            if (parsed.error) throw new Error(parsed.error)
 
             const daysLabel =
                 daysLeft === 0 ? 'TODAY' : daysLeft === 1 ? '1 DAY LEFT' : `${daysLeft} DAYS LEFT`
