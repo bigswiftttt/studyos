@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 type MCQ = {
   question: string
@@ -15,7 +16,6 @@ type ExamQuestion = {
   marks: number
   hint: string
 }
-
 export default function Assistant() {
   const [file, setFile] = useState<File | null>(null)
   const [activeTab, setActiveTab] = useState('summary')
@@ -34,6 +34,25 @@ export default function Assistant() {
   const [step, setStep] = useState('')
   const [mcqCount, setMcqCount] = useState(8)
   const [mcqDifficulty, setMcqDifficulty] = useState('medium')
+  const [user, setUser] = useState<any>(null)
+
+  useEffect(() => {
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      if (user) setUser(user)
+    })
+  }, [])
+
+  const saveMaterial = async (summaryText: string, flashcardsData: any[], mcqsData: any[], examQsData: any[], filename: string) => {
+    if (!user) return
+    await supabase.from('study_materials').insert({
+      user_id: user.id,
+      title: filename.replace('.pdf', ''),
+      summary: summaryText,
+      flashcards: flashcardsData,
+      mcqs: mcqsData,
+      exam_questions: examQsData,
+    })
+  }
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
@@ -87,6 +106,15 @@ export default function Assistant() {
       const examRes = await fetch('/api/exam-questions', { method: 'POST', body: formData4 })
       const examData = await examRes.json()
       if (!examData.error) setExamQuestions(examData.questions)
+
+      setStep('💾 Saving to your library...')
+      await saveMaterial(
+        summaryData.summary,
+        flashData.flashcards || [],
+        mcqData.mcqs || [],
+        examData.questions || [],
+        file.name
+      )
 
       setActiveTab('summary')
       setStep('')
@@ -154,7 +182,6 @@ export default function Assistant() {
           </p>
         </div>
 
-        {/* Upload Zone */}
         <div
           onDrop={handleDrop}
           onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
@@ -184,7 +211,6 @@ export default function Assistant() {
           )}
         </div>
 
-        {/* MCQ Settings */}
         <div style={{
           display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap',
           background: '#111110', border: '1px solid #1f1f18',
@@ -211,7 +237,6 @@ export default function Assistant() {
           </div>
         </div>
 
-        {/* Generate Button */}
         <button onClick={generate} disabled={!file || loading} style={{
           width: '100%', padding: '1rem', borderRadius: '10px', border: 'none',
           background: file && !loading ? '#f59e0b' : '#1a1a14',
@@ -231,7 +256,6 @@ export default function Assistant() {
           }}>⚠️ {error}</div>
         )}
 
-        {/* Tabs */}
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
           {tabs.map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{
@@ -249,10 +273,8 @@ export default function Assistant() {
           ))}
         </div>
 
-        {/* Tab Content */}
         <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', padding: '2rem' }}>
 
-          {/* Summary */}
           {activeTab === 'summary' && (
             summary ? (
               <div>
@@ -277,7 +299,6 @@ export default function Assistant() {
             )
           )}
 
-          {/* Flashcards */}
           {activeTab === 'flashcards' && (
             flashcards.length > 0 ? (
               <div>
@@ -325,7 +346,6 @@ export default function Assistant() {
             )
           )}
 
-          {/* MCQs */}
           {activeTab === 'mcqs' && (
             mcqs.length > 0 ? (
               currentQ < mcqs.length ? (
@@ -385,7 +405,6 @@ export default function Assistant() {
             )
           )}
 
-          {/* Exam Questions */}
           {activeTab === 'examquestions' && (
             examQuestions.length > 0 ? (
               <div>
