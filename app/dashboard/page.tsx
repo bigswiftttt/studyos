@@ -197,7 +197,7 @@ export default function Dashboard() {
                         { label: 'AI Assistant', icon: '🤖', href: '/assistant', desc: 'Upload notes & generate materials' },
                         { label: 'Focus Mode', icon: '⏱️', href: '/focus', desc: 'Start a Pomodoro session' },
                         { label: 'Panic Mode', icon: '🚨', href: '/panic', desc: 'AI crash revision planner' },
-                        { label: 'Materials', icon: '📖', href: '/materials', desc: 'Your saved study materials' },
+                        { label: 'Library', icon: '📖', href: '/library', desc: 'Your saved study materials' },
                     ].map((link) => (
                         <a key={link.label} href={link.href}
                             style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.25rem', textDecoration: 'none', color: 'inherit', display: 'block' }}
