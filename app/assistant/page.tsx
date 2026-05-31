@@ -44,7 +44,7 @@ export default function Assistant() {
 
   const saveMaterial = async (summaryText: string, flashcardsData: any[], mcqsData: any[], examQsData: any[], filename: string) => {
     if (!user) return
-    await supabase.from('study_materials').insert({
+    await supabase.from('study_Library').insert({
       user_id: user.id,
       title: filename.replace('.pdf', ''),
       summary: summaryText,
@@ -245,7 +245,7 @@ export default function Assistant() {
           cursor: file && !loading ? 'pointer' : 'not-allowed',
           fontFamily: 'inherit', marginBottom: '2rem', transition: 'all 0.2s'
         }}>
-          {loading ? step || 'Generating...' : file ? 'Generate Study Materials →' : 'Upload a PDF to get started'}
+          {loading ? step || 'Generating...' : file ? 'Generate Study Library →' : 'Upload a PDF to get started'}
         </button>
 
         {error && (
