@@ -27,6 +27,13 @@ export default function Materials() {
   const [score, setScore] = useState(0)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadStep, setUploadStep] = useState('')
+  const [uploadError, setUploadError] = useState('')
+  const [dragging, setDragging] = useState(false)
+  const [showUpload, setShowUpload] = useState(false)
+  const [mcqCount, setMcqCount] = useState(8)
+  const [mcqDifficulty, setMcqDifficulty] = useState('medium')
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
@@ -50,7 +57,7 @@ export default function Materials() {
     setLoading(false)
   }
 
- const openMaterial = (id: string, tab: 'summary' | 'flashcards' | 'mcqs' | 'examquestions' = 'summary') => {
+  const openMaterial = (id: string, tab: 'summary' | 'flashcards' | 'mcqs' | 'examquestions' = 'summary') => {
     setActiveView({ materialId: id, tab })
     setCurrentCard(0)
     setFlipped(false)
@@ -80,9 +87,77 @@ export default function Materials() {
     if (index === activeMaterial.mcqs[currentQ].correct) setScore(s => s + 1)
   }
 
+  const processAndUpload = async (file: File) => {
+    if (!user) return
+    setUploading(true)
+    setUploadError('')
+
+    try {
+      setUploadStep('📄 Extracting text from PDF...')
+      const formData1 = new FormData()
+      formData1.append('pdf', file)
+      const summaryRes = await fetch('/api/summarize', { method: 'POST', body: formData1 })
+      const summaryData = await summaryRes.json()
+      if (summaryData.error) throw new Error(summaryData.error)
+
+      setUploadStep('🃏 Generating flashcards...')
+      const formData2 = new FormData()
+      formData2.append('pdf', file)
+      const flashRes = await fetch('/api/flashcards', { method: 'POST', body: formData2 })
+      const flashData = await flashRes.json()
+
+      setUploadStep('❓ Generating MCQs...')
+      const formData3 = new FormData()
+      formData3.append('pdf', file)
+      formData3.append('count', mcqCount.toString())
+      formData3.append('difficulty', mcqDifficulty)
+      const mcqRes = await fetch('/api/mcqs', { method: 'POST', body: formData3 })
+      const mcqData = await mcqRes.json()
+
+      setUploadStep('🎯 Generating exam questions...')
+      const formData4 = new FormData()
+      formData4.append('pdf', file)
+      const examRes = await fetch('/api/exam-questions', { method: 'POST', body: formData4 })
+      const examData = await examRes.json()
+
+      setUploadStep('💾 Saving to library...')
+      await supabase.from('study_materials').insert({
+        user_id: user.id,
+        title: file.name.replace('.pdf', ''),
+        summary: summaryData.summary,
+        flashcards: flashData.flashcards || [],
+        mcqs: mcqData.mcqs || [],
+        exam_questions: examData.questions || [],
+      })
+
+      setShowUpload(false)
+      setUploadStep('')
+      fetchMaterials(user.id)
+    } catch (err: any) {
+      setUploadError(err.message)
+      setUploadStep('')
+    }
+
+    setUploading(false)
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file?.type === 'application/pdf') processAndUpload(file)
+  }
+
   const labelStyle = {
     fontSize: '0.72rem', color: '#5a5a4a', fontFamily: 'monospace',
     letterSpacing: '0.08em', textTransform: 'uppercase' as const,
+  }
+
+  const selectStyle = {
+    padding: '0.55rem 0.85rem', background: '#0d0d0a',
+    border: '1px solid #2a2a22', borderRadius: '8px',
+    color: '#f5f5f0', fontSize: '0.82rem',
+    fontFamily: 'inherit', outline: 'none', cursor: 'pointer'
   }
 
   // ── DETAIL VIEW ──
@@ -110,7 +185,6 @@ export default function Materials() {
         </nav>
 
         <div style={{ maxWidth: '760px', margin: '0 auto', padding: '3rem 1.5rem' }}>
-
           <div style={{ marginBottom: '2rem' }}>
             <h1 style={{ fontSize: 'clamp(1.25rem, 4vw, 1.6rem)', fontWeight: 800, letterSpacing: '-0.025em', marginBottom: '0.3rem' }}>
               {activeMaterial.title}
@@ -272,9 +346,7 @@ export default function Materials() {
                     {activeMaterial.exam_questions.map((q, i) => (
                       <div key={i} style={{ background: '#0d0d0a', border: '1px solid #2a2a22', borderRadius: '12px', padding: '1.25rem' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                          <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#5a5a4a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                            Q{i + 1} · {q.type}
-                          </span>
+                          <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#5a5a4a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Q{i + 1} · {q.type}</span>
                           <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#f59e0b', fontWeight: 700 }}>{q.marks} marks</span>
                         </div>
                         <p style={{ fontSize: '0.9rem', fontWeight: 600, lineHeight: 1.6, marginBottom: '0.75rem', color: '#f5f5f0' }}>{q.question}</p>
@@ -324,37 +396,93 @@ export default function Materials() {
               Your saved study sessions — summaries, flashcards, MCQs and exam questions.
             </p>
           </div>
-          <a href="/assistant" style={{
+          <button onClick={() => setShowUpload(!showUpload)} style={{
             padding: '0.65rem 1.25rem', borderRadius: '9px', border: 'none',
             background: '#f59e0b', color: '#0d0d0a',
             fontSize: '0.85rem', fontWeight: 700,
-            textDecoration: 'none', fontFamily: 'inherit', whiteSpace: 'nowrap'
+            cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap'
           }}>
-            + New Session
-          </a>
+            + Upload PDF
+          </button>
         </div>
 
+        {/* Upload Panel */}
+        {showUpload && (
+          <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', padding: '1.5rem', marginBottom: '2rem' }}>
+            <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: '130px' }}>
+                <p style={{ ...labelStyle, marginBottom: '0.4rem' }}>MCQ Count</p>
+                <select value={mcqCount} onChange={(e) => setMcqCount(Number(e.target.value))} style={selectStyle}>
+                  <option value={5}>5 questions</option>
+                  <option value={8}>8 questions</option>
+                  <option value={10}>10 questions</option>
+                  <option value={15}>15 questions</option>
+                </select>
+              </div>
+              <div style={{ flex: 1, minWidth: '130px' }}>
+                <p style={{ ...labelStyle, marginBottom: '0.4rem' }}>Difficulty</p>
+                <select value={mcqDifficulty} onChange={(e) => setMcqDifficulty(e.target.value)} style={selectStyle}>
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                  <option value="exam">Exam Level</option>
+                </select>
+              </div>
+            </div>
+
+            <div
+              onDrop={handleDrop}
+              onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
+              onDragLeave={() => setDragging(false)}
+              onClick={() => !uploading && document.getElementById('matFileInput')?.click()}
+              style={{
+                border: `2px dashed ${dragging ? '#f59e0b' : '#2a2a22'}`,
+                borderRadius: '12px', padding: '2.5rem 1.5rem',
+                textAlign: 'center', cursor: uploading ? 'not-allowed' : 'pointer',
+                background: dragging ? 'rgba(245,158,11,0.04)' : '#0d0d0a',
+                transition: 'all 0.2s'
+              }}
+            >
+              <input id="matFileInput" type="file" accept=".pdf" style={{ display: 'none' }}
+                onChange={(e) => { const f = e.target.files?.[0]; if (f) processAndUpload(f) }} />
+              <div style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>📄</div>
+              {uploading ? (
+                <p style={{ fontSize: '0.85rem', color: '#f59e0b', fontWeight: 600 }}>{uploadStep}</p>
+              ) : (
+                <>
+                  <p style={{ fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.25rem' }}>Drop PDF here or click to browse</p>
+                  <p style={{ fontSize: '0.78rem', color: '#5a5a4a' }}>AI will generate summary, flashcards, MCQs and exam questions</p>
+                </>
+              )}
+            </div>
+
+            {uploadError && (
+              <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: '8px', padding: '0.75rem 1rem', fontSize: '0.82rem', color: '#f87171', marginTop: '0.75rem' }}>
+                ⚠️ {uploadError}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Materials List */}
         {loading ? (
           <div style={{ textAlign: 'center', padding: '3rem 0' }}>
             <p style={{ fontSize: '0.85rem', color: '#3a3a30' }}>Loading materials...</p>
           </div>
         ) : materials.length === 0 ? (
-          <div style={{
-            background: '#111110', border: '1px solid #1f1f18',
-            borderRadius: '14px', padding: '3rem 2rem', textAlign: 'center'
-          }}>
+          <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', padding: '3rem 2rem', textAlign: 'center' }}>
             <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📂</p>
             <p style={{ fontSize: '0.875rem', color: '#5a5a4a', marginBottom: '1.5rem' }}>
-              No materials yet. Generate study materials from a PDF to save them here.
+              No materials yet. Upload a PDF or generate from the Assistant page.
             </p>
-            <a href="/assistant" style={{
-              padding: '0.65rem 1.5rem', borderRadius: '9px', border: 'none',
-              background: '#f59e0b', color: '#0d0d0a',
-              fontSize: '0.85rem', fontWeight: 700,
-              textDecoration: 'none', fontFamily: 'inherit'
-            }}>
-              Go to Assistant →
-            </a>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+              <button onClick={() => setShowUpload(true)} style={{ padding: '0.65rem 1.25rem', borderRadius: '9px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.85rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                + Upload PDF
+              </button>
+              <a href="/assistant" style={{ padding: '0.65rem 1.25rem', borderRadius: '9px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none', fontFamily: 'inherit' }}>
+                Go to Assistant →
+              </a>
+            </div>
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
@@ -365,7 +493,6 @@ export default function Materials() {
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 gap: '1rem', flexWrap: 'wrap'
               }}>
-                {/* Left */}
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p style={{ fontSize: '0.95rem', fontWeight: 700, color: '#e0e0d0', marginBottom: '0.4rem' }}>
                     {m.title}
@@ -377,8 +504,6 @@ export default function Materials() {
                     {m.exam_questions?.length > 0 && <span style={{ ...labelStyle, fontSize: '0.68rem', color: '#3a3a30' }}>{m.exam_questions.length} exam Qs</span>}
                   </div>
                 </div>
-
-                {/* Actions */}
                 <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0, flexWrap: 'wrap' }}>
                   <button onClick={() => openMaterial(m.id, 'summary')} style={{ padding: '0.45rem 0.85rem', borderRadius: '7px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                     Summary
