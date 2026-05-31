@@ -50,7 +50,7 @@ export default function Materials() {
     setLoading(false)
   }
 
-  const openMaterial = (id: string, tab: ActiveView['tab'] = 'summary') => {
+ const openMaterial = (id: string, tab: 'summary' | 'flashcards' | 'mcqs' | 'examquestions' = 'summary') => {
     setActiveView({ materialId: id, tab })
     setCurrentCard(0)
     setFlipped(false)
