@@ -106,6 +106,24 @@ export default function Materials() {
 
   return (
     <main style={{ minHeight: '100vh', background: '#0d0d0a', color: '#f5f5f0', fontFamily: 'Inter, sans-serif' }}>
+      <style>{`
+        @media (max-width: 767px) {
+          .material-card {
+            flex-direction: column !important;
+            align-items: flex-start !important;
+          }
+          .material-info {
+            width: 100%;
+          }
+          .material-info p {
+            max-width: 100% !important;
+          }
+          .material-actions {
+            width: 100%;
+            justify-content: flex-start !important;
+          }
+        }
+      `}</style>
 
       <nav style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -206,17 +224,17 @@ export default function Materials() {
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {materials.map(m => (
-              <div key={m.id} style={{
+              <div key={m.id} className="material-card" style={{
                 display: 'flex', alignItems: 'center', justifyContent: 'space-between',
                 background: '#111110', border: '1px solid #1f1f18',
                 borderRadius: '12px', padding: '1rem 1.25rem', gap: '1rem'
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
+                <div className="material-info" style={{ display: 'flex', alignItems: 'center', gap: '0.85rem', minWidth: 0 }}>
                   <span style={{ fontSize: '1.25rem', flexShrink: 0 }}>📄</span>
                   <div style={{ minWidth: 0 }}>
                     <p style={{
                       fontSize: '0.875rem', fontWeight: 600, color: '#e0e0d0',
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 'min(300px, 38vw)'
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px'
                     }}>
                       {m.name}
                     </p>
@@ -226,7 +244,7 @@ export default function Materials() {
                   </div>
                 </div>
 
-                <div style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
+                <div className="material-actions" style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                   <a
                     href={`/assistant?url=${encodeURIComponent(m.url)}&name=${encodeURIComponent(m.name)}`}
                     style={{
