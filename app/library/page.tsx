@@ -216,7 +216,7 @@ export default function Materials() {
                   <div style={{ minWidth: 0 }}>
                     <p style={{
                       fontSize: '0.875rem', fontWeight: 600, color: '#e0e0d0',
-                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px'
+                      whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: 'min(300px, 38vw)'
                     }}>
                       {m.name}
                     </p>
