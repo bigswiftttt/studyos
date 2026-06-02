@@ -206,6 +206,7 @@ export default function Dashboard() {
                         { label: 'Focus Mode', icon: '⏱️', href: '/focus', desc: 'Start a Pomodoro session' },
                         { label: 'Panic Mode', icon: '🚨', href: '/panic', desc: 'AI crash revision planner' },
                         { label: 'Library', icon: '📖', href: '/library', desc: 'Your saved study materials' },
+                        { label: 'Grade Entries', icon: '🎓', href: '/grade-entries', desc: 'Track grades & CGPA' },
                     ].map((link) => (
                         <a key={link.label} href={link.href}
                             style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.25rem', textDecoration: 'none', color: 'inherit', display: 'block' }}
