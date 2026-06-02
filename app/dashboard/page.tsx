@@ -21,12 +21,15 @@ export default function Dashboard() {
     const [tasks, setTasks] = useState<any[]>([])
     const [showCourseModal, setShowCourseModal] = useState(false)
     const [showTaskModal, setShowTaskModal] = useState(false)
+    const [editCourse, setEditCourse] = useState<any | null>(null)
+    const [deleteCourseId, setDeleteCourseId] = useState<string | null>(null)
     const [courseName, setCourseName] = useState('')
     const [courseCode, setCourseCode] = useState('')
     const [examDate, setExamDate] = useState('')
     const [taskTitle, setTaskTitle] = useState('')
     const [taskDue, setTaskDue] = useState('')
     const [saving, setSaving] = useState(false)
+    const [deleting, setDeleting] = useState(false)
 
     useEffect(() => {
         const init = async () => {
@@ -61,9 +64,42 @@ export default function Dashboard() {
             code: courseCode || null,
         })
         if (error) alert('Error: ' + error.message)
-        setCourseName(''); setCourseCode(''); setExamDate('')
+        resetCourseForm()
         setShowCourseModal(false); setSaving(false)
         fetchCourses(user.id)
+    }
+
+    const saveEditCourse = async () => {
+        if (!editCourse || !courseName.trim()) return
+        setSaving(true)
+        const { error } = await supabase.from('courses').update({
+            name: courseName,
+            code: courseCode || null,
+            exam_date: examDate || null,
+        }).eq('id', editCourse.id)
+        if (error) alert('Error: ' + error.message)
+        resetCourseForm()
+        setEditCourse(null); setSaving(false)
+        fetchCourses(user.id)
+    }
+
+    const confirmDeleteCourse = async () => {
+        if (!deleteCourseId) return
+        setDeleting(true)
+        await supabase.from('courses').delete().eq('id', deleteCourseId)
+        setDeleteCourseId(null); setDeleting(false)
+        fetchCourses(user.id)
+    }
+
+    const openEditCourse = (course: any) => {
+        setCourseName(course.name)
+        setCourseCode(course.code || '')
+        setExamDate(course.exam_date ? course.exam_date.split('T')[0] : '')
+        setEditCourse(course)
+    }
+
+    const resetCourseForm = () => {
+        setCourseName(''); setCourseCode(''); setExamDate('')
     }
 
     const addTask = async () => {
@@ -140,7 +176,7 @@ export default function Dashboard() {
                     <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                             <h2 style={{ fontSize: '0.9rem', fontWeight: 700 }}>My Courses</h2>
-                            <button onClick={() => setShowCourseModal(true)}
+                            <button onClick={() => { resetCourseForm(); setShowCourseModal(true) }}
                                 style={{ fontSize: '0.72rem', fontWeight: 700, background: '#f59e0b', color: '#0d0d0a', border: 'none', borderRadius: '6px', padding: '0.3rem 0.7rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 + Add
                             </button>
@@ -159,8 +195,17 @@ export default function Dashboard() {
                                                 {s.code || '—'}
                                             </span>
                                         </div>
-                                        <span style={{ fontSize: '0.85rem', fontWeight: 500, flex: 1 }}>{s.name}</span>
-                                        {s.exam_date && <span style={{ fontSize: '0.7rem', color: '#5a5a4a' }}>{new Date(s.exam_date).toLocaleDateString()}</span>}
+                                        <span style={{ fontSize: '0.85rem', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
+                                        {s.exam_date && <span style={{ fontSize: '0.7rem', color: '#5a5a4a', flexShrink: 0 }}>{new Date(s.exam_date).toLocaleDateString()}</span>}
+                                        {/* Edit / Delete */}
+                                        <div style={{ display: 'flex', gap: '0.3rem', flexShrink: 0 }}>
+                                            <button onClick={() => openEditCourse(s)} style={{ padding: '0.25rem 0.5rem', borderRadius: '5px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                Edit
+                                            </button>
+                                            <button onClick={() => setDeleteCourseId(s.id)} style={{ padding: '0.25rem 0.5rem', borderRadius: '5px', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                                Del
+                                            </button>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -228,29 +273,17 @@ export default function Dashboard() {
                     <div style={{ width: '100%', maxWidth: '420px', background: '#111110', border: '1px solid #1f1f18', borderRadius: '16px', padding: '1.5rem' }}>
                         <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '1.25rem' }}>Add Course</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <input
-                                placeholder="Course title e.g. Human Anatomy"
-                                value={courseName}
-                                onChange={(e) => setCourseName(e.target.value)}
-                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit' }}
-                            />
-                            <input
-                                placeholder="Course code e.g. ANAT301"
-                                value={courseCode}
-                                onChange={(e) => setCourseCode(e.target.value.toUpperCase())}
-                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f59e0b', fontSize: '0.875rem', outline: 'none', fontFamily: 'monospace', letterSpacing: '0.05em' }}
-                            />
+                            <input placeholder="Course title e.g. Human Anatomy" value={courseName} onChange={(e) => setCourseName(e.target.value)}
+                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit' }} />
+                            <input placeholder="Course code e.g. ANAT301" value={courseCode} onChange={(e) => setCourseCode(e.target.value.toUpperCase())}
+                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f59e0b', fontSize: '0.875rem', outline: 'none', fontFamily: 'monospace', letterSpacing: '0.05em' }} />
                             <div>
                                 <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginBottom: '0.4rem', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Exam Date (optional)</p>
-                                <input
-                                    type="date"
-                                    value={examDate}
-                                    onChange={(e) => setExamDate(e.target.value)}
-                                    style={{ width: '100%', background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', colorScheme: 'dark', boxSizing: 'border-box' }}
-                                />
+                                <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)}
+                                    style={{ width: '100%', background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', colorScheme: 'dark', boxSizing: 'border-box' }} />
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                <button onClick={() => setShowCourseModal(false)}
+                                <button onClick={() => { resetCourseForm(); setShowCourseModal(false) }}
                                     style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                                     Cancel
                                 </button>
@@ -259,6 +292,58 @@ export default function Dashboard() {
                                     {saving ? 'Saving...' : 'Add Course'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Course Modal */}
+            {editCourse && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.75)' }}>
+                    <div style={{ width: '100%', maxWidth: '420px', background: '#111110', border: '1px solid #1f1f18', borderRadius: '16px', padding: '1.5rem' }}>
+                        <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '1.25rem' }}>Edit Course</h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                            <input placeholder="Course title" value={courseName} onChange={(e) => setCourseName(e.target.value)}
+                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit' }} />
+                            <input placeholder="Course code" value={courseCode} onChange={(e) => setCourseCode(e.target.value.toUpperCase())}
+                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f59e0b', fontSize: '0.875rem', outline: 'none', fontFamily: 'monospace', letterSpacing: '0.05em' }} />
+                            <div>
+                                <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginBottom: '0.4rem', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Exam Date (optional)</p>
+                                <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)}
+                                    style={{ width: '100%', background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', colorScheme: 'dark', boxSizing: 'border-box' }} />
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
+                                <button onClick={() => { resetCourseForm(); setEditCourse(null) }}
+                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    Cancel
+                                </button>
+                                <button onClick={saveEditCourse} disabled={saving}
+                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                    {saving ? 'Saving...' : 'Save Changes'}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Delete Course Modal */}
+            {deleteCourseId && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.75)' }}>
+                    <div style={{ width: '100%', maxWidth: '380px', background: '#111110', border: '1px solid #2a2a22', borderRadius: '16px', padding: '2rem' }}>
+                        <p style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Delete course?</p>
+                        <p style={{ fontSize: '0.85rem', color: '#5a5a4a', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+                            This will permanently remove this course. This cannot be undone.
+                        </p>
+                        <div style={{ display: 'flex', gap: '0.75rem' }}>
+                            <button onClick={() => setDeleteCourseId(null)}
+                                style={{ flex: 1, padding: '0.75rem', borderRadius: '9px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                Cancel
+                            </button>
+                            <button onClick={confirmDeleteCourse} disabled={deleting}
+                                style={{ flex: 1, padding: '0.75rem', borderRadius: '9px', border: 'none', background: '#ef4444', color: '#fff', fontSize: '0.875rem', fontWeight: 700, cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
+                                {deleting ? 'Deleting...' : 'Delete'}
+                            </button>
                         </div>
                     </div>
                 </div>
