@@ -4,8 +4,6 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { useRouter } from 'next/navigation'
 
-const COLORS = ['#f59e0b', '#ef4444', '#22c55e', '#3b82f6', '#a855f7', '#ec4899', '#14b8a6', '#f97316']
-
 function getGreeting(name: string) {
     const hour = new Date().getHours()
     const first = name?.split(' ')[0] || 'there'
@@ -19,12 +17,12 @@ export default function Dashboard() {
     const router = useRouter()
     const [user, setUser] = useState<any>(null)
     const [loading, setLoading] = useState(true)
-    const [courses, setcourses] = useState<any[]>([])
+    const [courses, setCourses] = useState<any[]>([])
     const [tasks, setTasks] = useState<any[]>([])
-    const [showSubjectModal, setShowSubjectModal] = useState(false)
+    const [showCourseModal, setShowCourseModal] = useState(false)
     const [showTaskModal, setShowTaskModal] = useState(false)
-    const [subjectName, setSubjectName] = useState('')
-    const [subjectColor, setSubjectColor] = useState('#f59e0b')
+    const [courseName, setCourseName] = useState('')
+    const [courseCode, setCourseCode] = useState('')
     const [examDate, setExamDate] = useState('')
     const [taskTitle, setTaskTitle] = useState('')
     const [taskDue, setTaskDue] = useState('')
@@ -35,16 +33,16 @@ export default function Dashboard() {
             const { data: { user } } = await supabase.auth.getUser()
             if (!user) { router.push('/auth/login'); return }
             setUser(user)
-            fetchcourses(user.id)
+            fetchCourses(user.id)
             fetchTasks(user.id)
             setLoading(false)
         }
         init()
     }, [])
 
-    const fetchcourses = async (userId: string) => {
+    const fetchCourses = async (userId: string) => {
         const { data } = await supabase.from('courses').select('*').eq('user_id', userId).order('created_at', { ascending: false })
-        if (data) setcourses(data)
+        if (data) setCourses(data)
     }
 
     const fetchTasks = async (userId: string) => {
@@ -52,17 +50,20 @@ export default function Dashboard() {
         if (data) setTasks(data)
     }
 
-    const addSubject = async () => {
-        if (!subjectName.trim()) return
+    const addCourse = async () => {
+        if (!courseName.trim()) return
         setSaving(true)
         const { error } = await supabase.from('courses').insert({
-            user_id: user.id, name: subjectName,
-            color: subjectColor, exam_date: examDate || null
+            user_id: user.id,
+            name: courseName,
+            color: '#f59e0b',
+            exam_date: examDate || null,
+            code: courseCode || null,
         })
         if (error) alert('Error: ' + error.message)
-        setSubjectName(''); setExamDate(''); setSubjectColor('#f59e0b')
-        setShowSubjectModal(false); setSaving(false)
-        fetchcourses(user.id)
+        setCourseName(''); setCourseCode(''); setExamDate('')
+        setShowCourseModal(false); setSaving(false)
+        fetchCourses(user.id)
     }
 
     const addTask = async () => {
@@ -121,24 +122,25 @@ export default function Dashboard() {
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
                     {[
                         { label: 'Study Streak', value: '0 days', icon: '🔥' },
-                        { label: 'Hours This Week', value: '0h', icon: '⏱️' },
-                        { label: 'Tasks Done', value: `${tasks.filter(t => t.completed).length}/${tasks.length}`, icon: '✅' },
-                        { label: 'courses', value: `${courses.length}`, icon: '📚' },
+                        { label: 'Courses', value: `${courses.length}`, icon: '📚' },
+                        { label: 'Tasks', value: `${tasks.filter(t => !t.completed).length} pending`, icon: '✅' },
+                        { label: 'Focus Today', value: '0 min', icon: '⏱️' },
                     ].map((stat) => (
                         <div key={stat.label} style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.25rem' }}>
-                            <div style={{ fontSize: '1.25rem', marginBottom: '0.75rem' }}>{stat.icon}</div>
-                            <div style={{ fontSize: '1.4rem', fontWeight: 800, letterSpacing: '-0.02em' }}>{stat.value}</div>
-                            <div style={{ fontSize: '0.72rem', color: '#5a5a4a', marginTop: '0.3rem' }}>{stat.label}</div>
+                            <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{stat.icon}</div>
+                            <div style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.2rem' }}>{stat.value}</div>
+                            <div style={{ fontSize: '0.72rem', color: '#5a5a4a' }}>{stat.label}</div>
                         </div>
                     ))}
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
 
+                    {/* Courses */}
                     <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                             <h2 style={{ fontSize: '0.9rem', fontWeight: 700 }}>My Courses</h2>
-                            <button onClick={() => setShowSubjectModal(true)}
+                            <button onClick={() => setShowCourseModal(true)}
                                 style={{ fontSize: '0.72rem', fontWeight: 700, background: '#f59e0b', color: '#0d0d0a', border: 'none', borderRadius: '6px', padding: '0.3rem 0.7rem', cursor: 'pointer', fontFamily: 'inherit' }}>
                                 + Add
                             </button>
@@ -146,13 +148,17 @@ export default function Dashboard() {
                         {courses.length === 0 ? (
                             <div style={{ textAlign: 'center', padding: '2rem 0' }}>
                                 <p style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📚</p>
-                                <p style={{ fontSize: '0.8rem', color: '#5a5a4a' }}>No courses yet. Add your first!</p>
+                                <p style={{ fontSize: '0.8rem', color: '#5a5a4a' }}>No courses yet. Add your first one!</p>
                             </div>
                         ) : (
                             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                 {courses.map((s) => (
-                                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18' }}>
-                                        <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: s.color, flexShrink: 0 }}></div>
+                                    <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid #1a1a14' }}>
+                                        <div style={{ background: '#1f1f18', borderRadius: '5px', padding: '0.2rem 0.5rem', flexShrink: 0 }}>
+                                            <span style={{ fontSize: '0.65rem', fontFamily: 'monospace', fontWeight: 700, color: '#f59e0b', letterSpacing: '0.05em' }}>
+                                                {s.code || '—'}
+                                            </span>
+                                        </div>
                                         <span style={{ fontSize: '0.85rem', fontWeight: 500, flex: 1 }}>{s.name}</span>
                                         {s.exam_date && <span style={{ fontSize: '0.7rem', color: '#5a5a4a' }}>{new Date(s.exam_date).toLocaleDateString()}</span>}
                                     </div>
@@ -161,6 +167,7 @@ export default function Dashboard() {
                         )}
                     </div>
 
+                    {/* Tasks */}
                     <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.5rem' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.25rem' }}>
                             <h2 style={{ fontSize: '0.9rem', fontWeight: 700 }}>Today's Tasks</h2>
@@ -192,6 +199,7 @@ export default function Dashboard() {
                     </div>
                 </div>
 
+                {/* Quick Links */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem' }}>
                     {[
                         { label: 'AI Assistant', icon: '🤖', href: '/assistant', desc: 'Upload notes & generate materials' },
@@ -213,32 +221,39 @@ export default function Dashboard() {
 
             </div>
 
-            {showSubjectModal && (
+            {/* Add Course Modal */}
+            {showCourseModal && (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.75)' }}>
                     <div style={{ width: '100%', maxWidth: '420px', background: '#111110', border: '1px solid #1f1f18', borderRadius: '16px', padding: '1.5rem' }}>
                         <h3 style={{ fontWeight: 800, fontSize: '1rem', marginBottom: '1.25rem' }}>Add Course</h3>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            <input placeholder="Course title" value={subjectName} onChange={(e) => setSubjectName(e.target.value)}
-                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit' }} />
+                            <input
+                                placeholder="Course title e.g. Human Anatomy"
+                                value={courseName}
+                                onChange={(e) => setCourseName(e.target.value)}
+                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit' }}
+                            />
+                            <input
+                                placeholder="Course code e.g. ANAT301"
+                                value={courseCode}
+                                onChange={(e) => setCourseCode(e.target.value.toUpperCase())}
+                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f59e0b', fontSize: '0.875rem', outline: 'none', fontFamily: 'monospace', letterSpacing: '0.05em' }}
+                            />
                             <div>
-                                <p style={{ fontSize: '0.75rem', color: '#5a5a4a', marginBottom: '0.5rem' }}>Color</p>
-                                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                    {COLORS.map((c) => (
-                                        <div key={c} onClick={() => setSubjectColor(c)}
-                                            style={{ width: '28px', height: '28px', borderRadius: '50%', background: c, cursor: 'pointer', outline: subjectColor === c ? '2px solid #f5f5f0' : 'none', outlineOffset: '2px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                            {subjectColor === c && <span style={{ color: 'white', fontSize: '0.65rem', fontWeight: 900 }}>✓</span>}
-                                        </div>
-                                    ))}
-                                </div>
+                                <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginBottom: '0.4rem', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>Exam Date (optional)</p>
+                                <input
+                                    type="date"
+                                    value={examDate}
+                                    onChange={(e) => setExamDate(e.target.value)}
+                                    style={{ width: '100%', background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', colorScheme: 'dark', boxSizing: 'border-box' }}
+                                />
                             </div>
-                            <input type="date" value={examDate} onChange={(e) => setExamDate(e.target.value)}
-                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit' }} />
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
-                                <button onClick={() => setShowSubjectModal(false)}
+                                <button onClick={() => setShowCourseModal(false)}
                                     style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                                     Cancel
                                 </button>
-                                <button onClick={addSubject} disabled={saving}
+                                <button onClick={addCourse} disabled={saving}
                                     style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                                     {saving ? 'Saving...' : 'Add Course'}
                                 </button>
@@ -248,6 +263,7 @@ export default function Dashboard() {
                 </div>
             )}
 
+            {/* Add Task Modal */}
             {showTaskModal && (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.75)' }}>
                     <div style={{ width: '100%', maxWidth: '420px', background: '#111110', border: '1px solid #1f1f18', borderRadius: '16px', padding: '1.5rem' }}>
@@ -256,7 +272,7 @@ export default function Dashboard() {
                             <input placeholder="Task title" value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)}
                                 style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit' }} />
                             <input type="date" value={taskDue} onChange={(e) => setTaskDue(e.target.value)}
-                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit' }} />
+                                style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', colorScheme: 'dark' }} />
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                                 <button onClick={() => setShowTaskModal(false)}
                                     style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
