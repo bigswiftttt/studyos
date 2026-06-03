@@ -235,13 +235,22 @@ export default function GradeEntries() {
                     .predictor-row {
                         display: flex !important;
                         flex-direction: column !important;
+                        align-items: flex-start !important;
                         gap: 0.6rem !important;
                     }
                     .predictor-row input {
                         width: 100% !important;
+                        box-sizing: border-box !important;
+                    }
+                    .predictor-row select {
+                        width: 100% !important;
+                        box-sizing: border-box !important;
                     }
                     .predictor-grade-btns {
                         flex-wrap: wrap !important;
+                    }
+                    .predictor-row > button {
+                        align-self: flex-end !important;
                     }
                     .predictor-header {
                         display: none !important;
