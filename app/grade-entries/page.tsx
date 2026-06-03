@@ -23,6 +23,7 @@ type PredictorCourse = {
     title: string
     units: string
     expectedGrade: string
+    isSaved?: boolean
 }
 
 const GRADE_POINTS_5: Record<string, number> = {
@@ -62,9 +63,7 @@ export default function GradeEntries() {
     const [saving, setSaving] = useState(false)
 
     // Predictor state
-    const [predictorCourses, setPredictorCourses] = useState<PredictorCourse[]>([
-        { id: '1', title: '', units: '3', expectedGrade: 'A' }
-    ])
+    const [predictorCourses, setPredictorCourses] = useState<PredictorCourse[]>([])
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => {
@@ -75,16 +74,28 @@ export default function GradeEntries() {
 
     const fetchAll = async (userId: string) => {
         setLoading(true)
-        const { data: semData } = await supabase
-            .from('semesters').select('*').eq('user_id', userId).order('created_at', { ascending: true })
-        const { data: entryData } = await supabase
-            .from('grade_entries').select('*').eq('user_id', userId)
+        const [{ data: semData }, { data: entryData }, { data: predictorData }] = await Promise.all([
+            supabase.from('semesters').select('*').eq('user_id', userId).order('created_at', { ascending: true }),
+            supabase.from('grade_entries').select('*').eq('user_id', userId),
+            supabase.from('predictor_courses').select('*').eq('user_id', userId).order('created_at', { ascending: true })
+        ])
 
         if (semData) {
             setSemesters(semData)
             if (semData.length > 0 && !activeSemester) setActiveSemester(semData[semData.length - 1].id)
         }
         if (entryData) setEntries(entryData)
+        if (predictorData && predictorData.length > 0) {
+            setPredictorCourses(predictorData.map(p => ({
+                id: p.id,
+                title: p.title,
+                units: String(p.units),
+                expectedGrade: p.expected_grade,
+                isSaved: true
+            })))
+        } else {
+            setPredictorCourses([{ id: Date.now().toString(), title: '', units: '3', expectedGrade: 'A', isSaved: false }])
+        }
         setLoading(false)
     }
 
@@ -153,16 +164,51 @@ export default function GradeEntries() {
     }
 
     // Predictor helpers
-    const addPredictorCourse = () => {
-        setPredictorCourses(prev => [...prev, { id: Date.now().toString(), title: '', units: '3', expectedGrade: 'A' }])
+    const addPredictorCourse = async () => {
+        if (!user) return
+        const { data } = await supabase.from('predictor_courses').insert({
+            user_id: user.id, title: '', units: 3, expected_grade: 'A'
+        }).select().single()
+        if (data) {
+            setPredictorCourses(prev => [...prev, { id: data.id, title: '', units: '3', expectedGrade: 'A', isSaved: true }])
+        }
     }
 
-    const removePredictorCourse = (id: string) => {
-        setPredictorCourses(prev => prev.filter(c => c.id !== id))
+    const removePredictorCourse = async (id: string) => {
+        const course = predictorCourses.find(c => c.id === id)
+        if (course?.isSaved) {
+            await supabase.from('predictor_courses').delete().eq('id', id)
+        }
+        setPredictorCourses(prev => {
+            const remaining = prev.filter(c => c.id !== id)
+            return remaining.length > 0 ? remaining : [{ id: Date.now().toString(), title: '', units: '3', expectedGrade: 'A', isSaved: false }]
+        })
     }
 
-    const updatePredictorCourse = (id: string, field: keyof PredictorCourse, value: string) => {
+    const updatePredictorCourse = async (id: string, field: keyof PredictorCourse, value: string) => {
         setPredictorCourses(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c))
+        const course = predictorCourses.find(c => c.id === id)
+        if (!course || !user) return
+
+        if (course.isSaved) {
+            const updateData: any = {}
+            if (field === 'title') updateData.title = value
+            if (field === 'units') updateData.units = parseInt(value)
+            if (field === 'expectedGrade') updateData.expected_grade = value
+            await supabase.from('predictor_courses').update(updateData).eq('id', id)
+        } else {
+            // First edit on an unsaved row — save it to Supabase now
+            const updated = { ...course, [field]: value }
+            const { data } = await supabase.from('predictor_courses').insert({
+                user_id: user.id,
+                title: updated.title,
+                units: parseInt(updated.units),
+                expected_grade: updated.expectedGrade
+            }).select().single()
+            if (data) {
+                setPredictorCourses(prev => prev.map(c => c.id === id ? { ...c, id: data.id, isSaved: true } : c))
+            }
+        }
     }
 
     const gradePoints = scale === 5 ? GRADE_POINTS_5 : GRADE_POINTS_4
