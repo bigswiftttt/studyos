@@ -18,6 +18,13 @@ type GradeEntry = {
     grade: string
 }
 
+type PredictorCourse = {
+    id: string
+    title: string
+    units: string
+    expectedGrade: string
+}
+
 const GRADE_POINTS_5: Record<string, number> = {
     'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1, 'F': 0
 }
@@ -37,6 +44,7 @@ export default function GradeEntries() {
     const [activeSemester, setActiveSemester] = useState<string | null>(null)
     const [scale, setScale] = useState<4 | 5>(5)
     const [loading, setLoading] = useState(true)
+    const [activeTab, setActiveTab] = useState<'grades' | 'predictor'>('grades')
 
     // Modals
     const [showAddSemester, setShowAddSemester] = useState(false)
@@ -52,6 +60,11 @@ export default function GradeEntries() {
     const [units, setUnits] = useState('3')
     const [grade, setGrade] = useState('A')
     const [saving, setSaving] = useState(false)
+
+    // Predictor state
+    const [predictorCourses, setPredictorCourses] = useState<PredictorCourse[]>([
+        { id: '1', title: '', units: '3', expectedGrade: 'A' }
+    ])
 
     useEffect(() => {
         supabase.auth.getUser().then(({ data: { user } }) => {
@@ -139,6 +152,19 @@ export default function GradeEntries() {
         setCourseTitle(''); setCourseCode(''); setUnits('3'); setGrade('A')
     }
 
+    // Predictor helpers
+    const addPredictorCourse = () => {
+        setPredictorCourses(prev => [...prev, { id: Date.now().toString(), title: '', units: '3', expectedGrade: 'A' }])
+    }
+
+    const removePredictorCourse = (id: string) => {
+        setPredictorCourses(prev => prev.filter(c => c.id !== id))
+    }
+
+    const updatePredictorCourse = (id: string, field: keyof PredictorCourse, value: string) => {
+        setPredictorCourses(prev => prev.map(c => c.id === id ? { ...c, [field]: value } : c))
+    }
+
     const gradePoints = scale === 5 ? GRADE_POINTS_5 : GRADE_POINTS_4
     const grades = scale === 5 ? ['A', 'B', 'C', 'D', 'E', 'F'] : ['A', 'B', 'C', 'D', 'F']
 
@@ -156,9 +182,28 @@ export default function GradeEntries() {
         return totalUnits > 0 ? (totalPoints / totalUnits).toFixed(2) : null
     }
 
+    // Predictor calculation
+    const calcPredictedCGPA = () => {
+        const validNew = predictorCourses.filter(c => parseInt(c.units) > 0)
+        if (validNew.length === 0) return null
+
+        const existingPoints = entries.reduce((acc, e) => acc + (gradePoints[e.grade] ?? 0) * e.units, 0)
+        const existingUnits = entries.reduce((acc, e) => acc + e.units, 0)
+
+        const newPoints = validNew.reduce((acc, c) => acc + (gradePoints[c.expectedGrade] ?? 0) * parseInt(c.units), 0)
+        const newUnits = validNew.reduce((acc, c) => acc + parseInt(c.units), 0)
+
+        const totalPoints = existingPoints + newPoints
+        const totalUnits = existingUnits + newUnits
+
+        return totalUnits > 0 ? (totalPoints / totalUnits).toFixed(2) : null
+    }
+
     const cgpa = calcCGPA()
+    const predictedCGPA = calcPredictedCGPA()
     const cgpaNum = cgpa ? parseFloat(cgpa) : 0
-    const cgpaColor = cgpaNum >= (scale === 5 ? 4.5 : 3.5) ? '#22c55e' : cgpaNum >= (scale === 5 ? 3.5 : 2.5) ? '#f59e0b' : cgpaNum >= (scale === 5 ? 2.5 : 1.5) ? '#f97316' : '#ef4444'
+    const predictedNum = predictedCGPA ? parseFloat(predictedCGPA) : 0
+    const cgpaColor = (n: number) => n >= (scale === 5 ? 4.5 : 3.5) ? '#22c55e' : n >= (scale === 5 ? 3.5 : 2.5) ? '#f59e0b' : n >= (scale === 5 ? 2.5 : 1.5) ? '#f97316' : '#ef4444'
 
     const activeEntries = entries.filter(e => e.semester_id === activeSemester)
     const semesterGPA = calcGPA(activeEntries)
@@ -228,7 +273,7 @@ export default function GradeEntries() {
 
                 {/* CGPA Card */}
                 <div style={{
-                    background: '#111110', border: `1px solid ${cgpa ? cgpaColor + '40' : '#1f1f18'}`,
+                    background: '#111110', border: `1px solid ${cgpa ? cgpaColor(cgpaNum) + '40' : '#1f1f18'}`,
                     borderRadius: '14px', padding: '1.5rem', marginBottom: '1.5rem',
                     display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem'
                 }}>
@@ -236,7 +281,7 @@ export default function GradeEntries() {
                         <p style={{ fontSize: '0.68rem', color: '#5a5a4a', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
                             Cumulative GPA
                         </p>
-                        <p style={{ fontSize: '3rem', fontWeight: 900, letterSpacing: '-0.04em', fontFamily: 'monospace', color: cgpa ? cgpaColor : '#2a2a22', lineHeight: 1 }}>
+                        <p style={{ fontSize: '3rem', fontWeight: 900, letterSpacing: '-0.04em', fontFamily: 'monospace', color: cgpa ? cgpaColor(cgpaNum) : '#2a2a22', lineHeight: 1 }}>
                             {cgpa ?? '—'}
                         </p>
                         <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginTop: '0.4rem' }}>
@@ -249,116 +294,234 @@ export default function GradeEntries() {
                     </div>
                 </div>
 
-                {/* Semester Tabs */}
-                {semesters.length > 0 && (
-                    <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                        {semesters.map(s => (
-                            <button key={s.id} onClick={() => setActiveSemester(s.id)} style={{
-                                padding: '0.5rem 1rem', borderRadius: '8px',
-                                border: `1px solid ${activeSemester === s.id ? '#f59e0b' : '#2a2a22'}`,
-                                background: activeSemester === s.id ? '#f59e0b' : '#111110',
-                                color: activeSemester === s.id ? '#0d0d0a' : '#5a5a4a',
-                                fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'
-                            }}>
-                                {s.name}
-                            </button>
-                        ))}
-                        <button onClick={() => setShowAddSemester(true)} style={{
-                            padding: '0.5rem 1rem', borderRadius: '8px',
-                            border: '1px dashed #2a2a22', background: 'transparent',
-                            color: '#5a5a4a', fontSize: '0.8rem', fontWeight: 600,
-                            cursor: 'pointer', fontFamily: 'inherit'
+                {/* Tab Switcher */}
+                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '0.35rem' }}>
+                    {[
+                        { key: 'grades', label: '📋 Grade Records' },
+                        { key: 'predictor', label: '🔮 CGPA Predictor' }
+                    ].map(t => (
+                        <button key={t.key} onClick={() => setActiveTab(t.key as any)} style={{
+                            flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none',
+                            background: activeTab === t.key ? '#f59e0b' : 'transparent',
+                            color: activeTab === t.key ? '#0d0d0a' : '#5a5a4a',
+                            fontSize: '0.82rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit',
+                            transition: 'all 0.2s'
                         }}>
-                            + New Semester
+                            {t.label}
                         </button>
-                    </div>
-                )}
+                    ))}
+                </div>
 
-                {/* No semesters */}
-                {semesters.length === 0 && (
-                    <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', padding: '3rem 2rem', textAlign: 'center', marginBottom: '1.5rem' }}>
-                        <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📋</p>
-                        <p style={{ fontSize: '0.875rem', color: '#5a5a4a', marginBottom: '1.5rem' }}>No semesters yet. Create your first one to start tracking grades.</p>
-                        <button onClick={() => setShowAddSemester(true)} style={{
-                            padding: '0.75rem 1.5rem', borderRadius: '9px', border: 'none',
-                            background: '#f59e0b', color: '#0d0d0a', fontSize: '0.875rem',
-                            fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit'
-                        }}>
-                            + Add First Semester
-                        </button>
-                    </div>
-                )}
-
-                {/* Active Semester Panel */}
-                {activeSemester && (
-                    <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', overflow: 'hidden' }}>
-
-                        {/* Semester Header */}
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #1a1a14', flexWrap: 'wrap', gap: '0.75rem' }}>
-                            <div>
-                                <p style={{ fontSize: '0.9rem', fontWeight: 700 }}>{semesters.find(s => s.id === activeSemester)?.name}</p>
-                                {semesterGPA && (
-                                    <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginTop: '0.15rem' }}>
-                                        Semester GPA: <span style={{ color: '#f59e0b', fontWeight: 700 }}>{semesterGPA}</span>
-                                    </p>
-                                )}
-                            </div>
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                <button onClick={() => { resetEntryForm(); setShowAddEntry(true) }} style={{
-                                    padding: '0.45rem 0.9rem', borderRadius: '7px', border: 'none',
-                                    background: '#f59e0b', color: '#0d0d0a',
-                                    fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit'
-                                }}>
-                                    + Add Course
-                                </button>
-                                <button onClick={() => setDeleteSemesterId(activeSemester)} style={{
-                                    padding: '0.45rem 0.75rem', borderRadius: '7px',
-                                    border: '1px solid rgba(239,68,68,0.2)', background: 'transparent',
-                                    color: '#f87171', fontSize: '0.78rem', fontWeight: 600,
+                {/* ── GRADE RECORDS TAB ── */}
+                {activeTab === 'grades' && (
+                    <>
+                        {/* Semester Tabs */}
+                        {semesters.length > 0 && (
+                            <div style={{ display: 'flex', gap: '0.4rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                {semesters.map(s => (
+                                    <button key={s.id} onClick={() => setActiveSemester(s.id)} style={{
+                                        padding: '0.5rem 1rem', borderRadius: '8px',
+                                        border: `1px solid ${activeSemester === s.id ? '#f59e0b' : '#2a2a22'}`,
+                                        background: activeSemester === s.id ? '#f59e0b' : '#111110',
+                                        color: activeSemester === s.id ? '#0d0d0a' : '#5a5a4a',
+                                        fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'
+                                    }}>
+                                        {s.name}
+                                    </button>
+                                ))}
+                                <button onClick={() => setShowAddSemester(true)} style={{
+                                    padding: '0.5rem 1rem', borderRadius: '8px',
+                                    border: '1px dashed #2a2a22', background: 'transparent',
+                                    color: '#5a5a4a', fontSize: '0.8rem', fontWeight: 600,
                                     cursor: 'pointer', fontFamily: 'inherit'
                                 }}>
-                                    Delete Semester
+                                    + New Semester
+                                </button>
+                            </div>
+                        )}
+
+                        {/* No semesters */}
+                        {semesters.length === 0 && (
+                            <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', padding: '3rem 2rem', textAlign: 'center', marginBottom: '1.5rem' }}>
+                                <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📋</p>
+                                <p style={{ fontSize: '0.875rem', color: '#5a5a4a', marginBottom: '1.5rem' }}>No semesters yet. Create your first one to start tracking grades.</p>
+                                <button onClick={() => setShowAddSemester(true)} style={{
+                                    padding: '0.75rem 1.5rem', borderRadius: '9px', border: 'none',
+                                    background: '#f59e0b', color: '#0d0d0a', fontSize: '0.875rem',
+                                    fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit'
+                                }}>
+                                    + Add First Semester
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Active Semester Panel */}
+                        {activeSemester && (
+                            <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', overflow: 'hidden' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.25rem', borderBottom: '1px solid #1a1a14', flexWrap: 'wrap', gap: '0.75rem' }}>
+                                    <div>
+                                        <p style={{ fontSize: '0.9rem', fontWeight: 700 }}>{semesters.find(s => s.id === activeSemester)?.name}</p>
+                                        {semesterGPA && (
+                                            <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginTop: '0.15rem' }}>
+                                                Semester GPA: <span style={{ color: '#f59e0b', fontWeight: 700 }}>{semesterGPA}</span>
+                                            </p>
+                                        )}
+                                    </div>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <button onClick={() => { resetEntryForm(); setShowAddEntry(true) }} style={{
+                                            padding: '0.45rem 0.9rem', borderRadius: '7px', border: 'none',
+                                            background: '#f59e0b', color: '#0d0d0a',
+                                            fontSize: '0.78rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit'
+                                        }}>
+                                            + Add Course
+                                        </button>
+                                        <button onClick={() => setDeleteSemesterId(activeSemester)} style={{
+                                            padding: '0.45rem 0.75rem', borderRadius: '7px',
+                                            border: '1px solid rgba(239,68,68,0.2)', background: 'transparent',
+                                            color: '#f87171', fontSize: '0.78rem', fontWeight: 600,
+                                            cursor: 'pointer', fontFamily: 'inherit'
+                                        }}>
+                                            Delete Semester
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {activeEntries.length === 0 ? (
+                                    <div style={{ padding: '2.5rem', textAlign: 'center' }}>
+                                        <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>No courses yet. Add your first course above.</p>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '0.5rem', padding: '0.6rem 1.25rem', borderBottom: '1px solid #1a1a14' }}>
+                                            {['Course', 'Code', 'Units', 'Grade', ''].map((h, i) => (
+                                                <p key={i} style={{ fontSize: '0.65rem', color: '#3a3a30', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', textAlign: i > 1 ? 'center' : 'left' }}>{h}</p>
+                                            ))}
+                                        </div>
+                                        {activeEntries.map(entry => (
+                                            <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '0.5rem', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1a1a14', alignItems: 'center' }}>
+                                                <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#e0e0d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.course_title}</p>
+                                                <p style={{ fontSize: '0.72rem', color: '#f59e0b', fontFamily: 'monospace', fontWeight: 700, textAlign: 'center' }}>{entry.course_code || '—'}</p>
+                                                <p style={{ fontSize: '0.82rem', color: '#8a8a7a', textAlign: 'center' }}>{entry.units}</p>
+                                                <p style={{ fontSize: '0.9rem', fontWeight: 800, textAlign: 'center', color: GRADE_COLORS[entry.grade] || '#f5f5f0' }}>{entry.grade}</p>
+                                                <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
+                                                    <button onClick={() => openEditEntry(entry)} style={{ padding: '0.3rem 0.6rem', borderRadius: '5px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.7rem', cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                                                    <button onClick={() => setDeleteEntryId(entry.id)} style={{ padding: '0.3rem 0.6rem', borderRadius: '5px', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: '0.7rem', cursor: 'pointer', fontFamily: 'inherit' }}>Del</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '0.5rem', padding: '0.85rem 1.25rem', background: '#0d0d0a' }}>
+                                            <p style={{ fontSize: '0.72rem', color: '#5a5a4a', fontFamily: 'monospace' }}>TOTAL</p>
+                                            <p style={{ fontSize: '0.72rem', color: '#3a3a30', textAlign: 'center' }}></p>
+                                            <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f5f5f0', textAlign: 'center' }}>{activeEntries.reduce((a, e) => a + e.units, 0)}</p>
+                                            <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f59e0b', textAlign: 'center' }}>{semesterGPA ?? '—'}</p>
+                                            <p></p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </>
+                )}
+
+                {/* ── CGPA PREDICTOR TAB ── */}
+                {activeTab === 'predictor' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+
+                        {/* Prediction Result */}
+                        <div style={{
+                            background: '#111110',
+                            border: `1px solid ${predictedCGPA ? cgpaColor(predictedNum) + '40' : '#1f1f18'}`,
+                            borderRadius: '14px', padding: '1.5rem',
+                            display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem'
+                        }}>
+                            <div>
+                                <p style={{ fontSize: '0.68rem', color: '#5a5a4a', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+                                    Predicted CGPA
+                                </p>
+                                <p style={{ fontSize: '3rem', fontWeight: 900, letterSpacing: '-0.04em', fontFamily: 'monospace', color: predictedCGPA ? cgpaColor(predictedNum) : '#2a2a22', lineHeight: 1 }}>
+                                    {predictedCGPA ?? '—'}
+                                </p>
+                                <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginTop: '0.4rem' }}>
+                                    {predictedCGPA ? `out of ${scale}.0` : 'Add courses below to predict'}
+                                </p>
+                            </div>
+                            {cgpa && predictedCGPA && (
+                                <div style={{ textAlign: 'right' }}>
+                                    <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginBottom: '0.25rem' }}>Current CGPA</p>
+                                    <p style={{ fontSize: '1.25rem', fontWeight: 800, fontFamily: 'monospace', color: cgpaColor(cgpaNum) }}>{cgpa}</p>
+                                    <p style={{
+                                        fontSize: '0.78rem', fontWeight: 700, marginTop: '0.35rem',
+                                        color: predictedNum > cgpaNum ? '#22c55e' : predictedNum < cgpaNum ? '#ef4444' : '#5a5a4a'
+                                    }}>
+                                        {predictedNum > cgpaNum ? `▲ +${(predictedNum - cgpaNum).toFixed(2)}` :
+                                            predictedNum < cgpaNum ? `▼ ${(predictedNum - cgpaNum).toFixed(2)}` : '→ No change'}
+                                    </p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Info */}
+                        <div style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: '10px', padding: '0.85rem 1rem' }}>
+                            <p style={{ fontSize: '0.8rem', color: '#8a8a7a', lineHeight: 1.6 }}>
+                                💡 Enter your <strong style={{ color: '#f59e0b' }}>current semester courses</strong> with your expected grades to see how they'll affect your overall CGPA.
+                                {!cgpa && <span> Add past semester grades first to get an accurate prediction.</span>}
+                            </p>
+                        </div>
+
+                        {/* Predictor Course List */}
+                        <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', overflow: 'hidden' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0.5rem', padding: '0.6rem 1.25rem', borderBottom: '1px solid #1a1a14' }}>
+                                {['Course', 'Units', 'Expected Grade', ''].map((h, i) => (
+                                    <p key={i} style={{ fontSize: '0.65rem', color: '#3a3a30', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{h}</p>
+                                ))}
+                            </div>
+
+                            {predictorCourses.map((c, idx) => (
+                                <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0.75rem', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1a1a14', alignItems: 'center' }}>
+                                    <input
+                                        value={c.title}
+                                        onChange={e => updatePredictorCourse(c.id, 'title', e.target.value)}
+                                        placeholder={`Course ${idx + 1}`}
+                                        style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '6px', padding: '0.5rem 0.75rem', color: '#f5f5f0', fontSize: '0.82rem', fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box' as const }}
+                                    />
+                                    <select value={c.units} onChange={e => updatePredictorCourse(c.id, 'units', e.target.value)}
+                                        style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '6px', padding: '0.5rem 0.6rem', color: '#f5f5f0', fontSize: '0.82rem', fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}>
+                                        {[1, 2, 3, 4, 5, 6].map(u => <option key={u} value={u}>{u}</option>)}
+                                    </select>
+                                    <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                        {grades.map(g => (
+                                            <button key={g} onClick={() => updatePredictorCourse(c.id, 'expectedGrade', g)} style={{
+                                                padding: '0.35rem 0.55rem', borderRadius: '5px',
+                                                border: `1px solid ${c.expectedGrade === g ? GRADE_COLORS[g] : '#2a2a22'}`,
+                                                background: c.expectedGrade === g ? `${GRADE_COLORS[g]}18` : 'transparent',
+                                                color: c.expectedGrade === g ? GRADE_COLORS[g] : '#5a5a4a',
+                                                fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit'
+                                            }}>{g}</button>
+                                        ))}
+                                    </div>
+                                    <button onClick={() => removePredictorCourse(c.id)} style={{
+                                        padding: '0.35rem 0.6rem', borderRadius: '5px',
+                                        border: '1px solid rgba(239,68,68,0.2)', background: 'transparent',
+                                        color: '#f87171', fontSize: '0.72rem', cursor: 'pointer', fontFamily: 'inherit'
+                                    }}>✕</button>
+                                </div>
+                            ))}
+
+                            <div style={{ padding: '0.85rem 1.25rem' }}>
+                                <button onClick={addPredictorCourse} style={{
+                                    padding: '0.5rem 1rem', borderRadius: '7px',
+                                    border: '1px dashed #2a2a22', background: 'transparent',
+                                    color: '#5a5a4a', fontSize: '0.8rem', fontWeight: 600,
+                                    cursor: 'pointer', fontFamily: 'inherit'
+                                }}>
+                                    + Add Course
                                 </button>
                             </div>
                         </div>
 
-                        {/* Course List */}
-                        {activeEntries.length === 0 ? (
-                            <div style={{ padding: '2.5rem', textAlign: 'center' }}>
-                                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>No courses yet. Add your first course above.</p>
-                            </div>
-                        ) : (
-                            <div>
-                                {/* Table Header */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '0.5rem', padding: '0.6rem 1.25rem', borderBottom: '1px solid #1a1a14' }}>
-                                    {['Course', 'Code', 'Units', 'Grade', ''].map((h, i) => (
-                                        <p key={i} style={{ fontSize: '0.65rem', color: '#3a3a30', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase', textAlign: i > 1 ? 'center' : 'left' }}>{h}</p>
-                                    ))}
-                                </div>
-                                {activeEntries.map(entry => (
-                                    <div key={entry.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '0.5rem', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1a1a14', alignItems: 'center' }}>
-                                        <p style={{ fontSize: '0.875rem', fontWeight: 600, color: '#e0e0d0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{entry.course_title}</p>
-                                        <p style={{ fontSize: '0.72rem', color: '#f59e0b', fontFamily: 'monospace', fontWeight: 700, textAlign: 'center' }}>{entry.course_code || '—'}</p>
-                                        <p style={{ fontSize: '0.82rem', color: '#8a8a7a', textAlign: 'center' }}>{entry.units}</p>
-                                        <p style={{ fontSize: '0.9rem', fontWeight: 800, textAlign: 'center', color: GRADE_COLORS[entry.grade] || '#f5f5f0' }}>{entry.grade}</p>
-                                        <div style={{ display: 'flex', gap: '0.35rem', justifyContent: 'flex-end' }}>
-                                            <button onClick={() => openEditEntry(entry)} style={{ padding: '0.3rem 0.6rem', borderRadius: '5px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.7rem', cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
-                                            <button onClick={() => setDeleteEntryId(entry.id)} style={{ padding: '0.3rem 0.6rem', borderRadius: '5px', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: '0.7rem', cursor: 'pointer', fontFamily: 'inherit' }}>Del</button>
-                                        </div>
-                                    </div>
-                                ))}
-                                {/* Totals Row */}
-                                <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto auto', gap: '0.5rem', padding: '0.85rem 1.25rem', background: '#0d0d0a' }}>
-                                    <p style={{ fontSize: '0.72rem', color: '#5a5a4a', fontFamily: 'monospace' }}>TOTAL</p>
-                                    <p style={{ fontSize: '0.72rem', color: '#3a3a30', textAlign: 'center' }}></p>
-                                    <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f5f5f0', textAlign: 'center' }}>{activeEntries.reduce((a, e) => a + e.units, 0)}</p>
-                                    <p style={{ fontSize: '0.82rem', fontWeight: 700, color: '#f59e0b', textAlign: 'center' }}>{semesterGPA ?? '—'}</p>
-                                    <p></p>
-                                </div>
-                            </div>
-                        )}
                     </div>
                 )}
+
             </div>
 
             {/* Add Semester Modal */}
