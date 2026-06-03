@@ -230,6 +230,24 @@ export default function GradeEntries() {
 
     return (
         <main style={{ minHeight: '100vh', background: '#0d0d0a', color: '#f5f5f0', fontFamily: 'Inter, sans-serif' }}>
+            <style>{`
+                @media (max-width: 767px) {
+                    .predictor-row {
+                        display: flex !important;
+                        flex-direction: column !important;
+                        gap: 0.6rem !important;
+                    }
+                    .predictor-row input {
+                        width: 100% !important;
+                    }
+                    .predictor-grade-btns {
+                        flex-wrap: wrap !important;
+                    }
+                    .predictor-header {
+                        display: none !important;
+                    }
+                }
+            `}</style>
 
             {/* Nav */}
             <nav style={{
@@ -470,14 +488,14 @@ export default function GradeEntries() {
 
                         {/* Predictor Course List */}
                         <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', overflow: 'hidden' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0.5rem', padding: '0.6rem 1.25rem', borderBottom: '1px solid #1a1a14' }}>
+                            <div className="predictor-header" style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0.5rem', padding: '0.6rem 1.25rem', borderBottom: '1px solid #1a1a14' }}>
                                 {['Course', 'Units', 'Expected Grade', ''].map((h, i) => (
                                     <p key={i} style={{ fontSize: '0.65rem', color: '#3a3a30', fontFamily: 'monospace', letterSpacing: '0.08em', textTransform: 'uppercase' }}>{h}</p>
                                 ))}
                             </div>
 
                             {predictorCourses.map((c, idx) => (
-                                <div key={c.id} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0.75rem', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1a1a14', alignItems: 'center' }}>
+                                <div key={c.id} className="predictor-row" style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '0.75rem', padding: '0.85rem 1.25rem', borderBottom: '1px solid #1a1a14', alignItems: 'center' }}>
                                     <input
                                         value={c.title}
                                         onChange={e => updatePredictorCourse(c.id, 'title', e.target.value)}
@@ -488,7 +506,7 @@ export default function GradeEntries() {
                                         style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '6px', padding: '0.5rem 0.6rem', color: '#f5f5f0', fontSize: '0.82rem', fontFamily: 'inherit', outline: 'none', cursor: 'pointer' }}>
                                         {[1, 2, 3, 4, 5, 6].map(u => <option key={u} value={u}>{u}</option>)}
                                     </select>
-                                    <div style={{ display: 'flex', gap: '0.3rem' }}>
+                                    <div className="predictor-grade-btns" style={{ display: 'flex', gap: '0.3rem' }}>
                                         {grades.map(g => (
                                             <button key={g} onClick={() => updatePredictorCourse(c.id, 'expectedGrade', g)} style={{
                                                 padding: '0.35rem 0.55rem', borderRadius: '5px',
