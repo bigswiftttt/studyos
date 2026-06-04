@@ -16,6 +16,7 @@ type ExamQuestion = {
   marks: number
   hint: string
 }
+
 export default function Assistant() {
   const [file, setFile] = useState<File | null>(null)
   const [activeTab, setActiveTab] = useState('summary')
@@ -35,31 +36,33 @@ export default function Assistant() {
   const [mcqCount, setMcqCount] = useState(8)
   const [mcqDifficulty, setMcqDifficulty] = useState('medium')
   const [user, setUser] = useState<any>(null)
+  const [quizSaved, setQuizSaved] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUser(user)
     })
   }, [])
-  useEffect(() => {
-    if (mcqs.length > 0 && currentQ >= mcqs.length && user) {
-      supabase.from('quiz_attempts').insert({
-        user_id: user.id,
-        score,
-        total: mcqs.length,
-      })
-    }
-  }, [currentQ, mcqs.length])
 
   const saveMaterial = async (summaryText: string, flashcardsData: any[], mcqsData: any[], examQsData: any[], filename: string) => {
     if (!user) return
-    await supabase.from('study_Library').insert({
+    await supabase.from('study_materials').insert({
       user_id: user.id,
       title: filename.replace('.pdf', ''),
       summary: summaryText,
       flashcards: flashcardsData,
       mcqs: mcqsData,
       exam_questions: examQsData,
+    })
+  }
+
+  const saveQuizAttempt = async (finalScore: number, total: number) => {
+    if (!user || quizSaved) return
+    setQuizSaved(true)
+    await supabase.from('quiz_attempts').insert({
+      user_id: user.id,
+      score: finalScore,
+      total,
     })
   }
 
@@ -83,6 +86,7 @@ export default function Assistant() {
     setCurrentQ(0)
     setSelected(null)
     setScore(0)
+    setQuizSaved(false)
 
     try {
       setStep('📄 Extracting text from PDF...')
@@ -144,6 +148,11 @@ export default function Assistant() {
   const nextQuestion = () => {
     setSelected(null)
     setCurrentQ(q => q + 1)
+  }
+
+  // Save quiz score when quiz completes
+  const handleQuizComplete = async (finalScore: number) => {
+    await saveQuizAttempt(finalScore, mcqs.length)
   }
 
   const tabs = ['summary', 'flashcards', 'mcqs', 'examquestions']
@@ -254,7 +263,7 @@ export default function Assistant() {
           cursor: file && !loading ? 'pointer' : 'not-allowed',
           fontFamily: 'inherit', marginBottom: '2rem', transition: 'all 0.2s'
         }}>
-          {loading ? step || 'Generating...' : file ? 'Generate Study Library →' : 'Upload a PDF to get started'}
+          {loading ? step || 'Generating...' : file ? 'Generate Study Materials →' : 'Upload a PDF to get started'}
         </button>
 
         {error && (
@@ -401,7 +410,10 @@ export default function Assistant() {
                   <p style={{ fontSize: '0.85rem', color: '#5a5a4a', marginBottom: '2rem' }}>
                     {score === mcqs.length ? 'Perfect score! 🏆' : score >= mcqs.length * 0.7 ? 'Great job! Keep it up 💪' : 'Keep studying — you got this! 📚'}
                   </p>
-                  <button onClick={() => { setCurrentQ(0); setSelected(null); setScore(0) }} style={{ padding: '0.85rem 2rem', borderRadius: '10px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                  <button onClick={async () => {
+                    await handleQuizComplete(score)
+                    setCurrentQ(0); setSelected(null); setScore(0)
+                  }} style={{ padding: '0.85rem 2rem', borderRadius: '10px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                     Retry Quiz →
                   </button>
                 </div>
@@ -427,21 +439,13 @@ export default function Assistant() {
                   {examQuestions.map((q, i) => (
                     <div key={i} style={{ background: '#0d0d0a', border: '1px solid #2a2a22', borderRadius: '12px', padding: '1.25rem' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                        <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#5a5a4a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                          Q{i + 1} · {q.type}
-                        </span>
-                        <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#f59e0b', fontWeight: 700 }}>
-                          {q.marks} marks
-                        </span>
+                        <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#5a5a4a', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Q{i + 1} · {q.type}</span>
+                        <span style={{ fontSize: '0.7rem', fontFamily: 'monospace', color: '#f59e0b', fontWeight: 700 }}>{q.marks} marks</span>
                       </div>
-                      <p style={{ fontSize: '0.9rem', fontWeight: 600, lineHeight: 1.6, marginBottom: '0.75rem', color: '#f5f5f0' }}>
-                        {q.question}
-                      </p>
+                      <p style={{ fontSize: '0.9rem', fontWeight: 600, lineHeight: 1.6, marginBottom: '0.75rem', color: '#f5f5f0' }}>{q.question}</p>
                       {q.hint && (
                         <div style={{ background: 'rgba(245,158,11,0.05)', border: '1px solid rgba(245,158,11,0.15)', borderRadius: '8px', padding: '0.6rem 0.9rem' }}>
-                          <p style={{ fontSize: '0.75rem', color: '#8a8a7a', lineHeight: 1.5 }}>
-                            💡 {q.hint}
-                          </p>
+                          <p style={{ fontSize: '0.75rem', color: '#8a8a7a', lineHeight: 1.5 }}>💡 {q.hint}</p>
                         </div>
                       )}
                     </div>

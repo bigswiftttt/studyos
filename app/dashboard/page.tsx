@@ -30,6 +30,7 @@ export default function Dashboard() {
     const [taskDue, setTaskDue] = useState('')
     const [saving, setSaving] = useState(false)
     const [deleting, setDeleting] = useState(false)
+    const [achievementPopup, setAchievementPopup] = useState<{ title: string; description: string; icon: string; rarity: string } | null>(null)
 
     useEffect(() => {
         const init = async () => {
@@ -37,6 +38,7 @@ export default function Dashboard() {
             if (!user) { router.push('/auth/login'); return }
             setUser(user)
             fetchCourses(user.id)
+            checkAchievements(user.id)
             fetchTasks(user.id)
             setLoading(false)
         }
@@ -118,6 +120,115 @@ export default function Dashboard() {
     const toggleTask = async (taskId: string, completed: boolean) => {
         await supabase.from('tasks').update({ completed: !completed }).eq('id', taskId)
         fetchTasks(user.id)
+    }
+    const checkAchievements = async (userId: string) => {
+        const [
+            { data: sessions },
+            { data: materials },
+            { data: panicPlans },
+            { data: gradeEntries },
+            { data: quizAttempts },
+            { data: existing },
+        ] = await Promise.all([
+            supabase.from('focus_sessions').select('*').eq('user_id', userId),
+            supabase.from('study_materials').select('id').eq('user_id', userId),
+            supabase.from('panic_plans').select('*').eq('user_id', userId),
+            supabase.from('grade_entries').select('units, grade').eq('user_id', userId),
+            supabase.from('quiz_attempts').select('*').eq('user_id', userId),
+            supabase.from('achievements').select('achievement_key').eq('user_id', userId),
+        ])
+
+        const existingKeys = (existing || []).map((a: any) => a.achievement_key)
+
+        const totalSessions = sessions?.length || 0
+        const totalHours = (sessions || []).reduce((acc: number, s: any) => acc + (s.duration_mins || 0), 0) / 60
+        const materialCount = materials?.length || 0
+        const panicCount = panicPlans?.length || 0
+        const panicUnder72h = (panicPlans || []).some((p: any) => p.days_until_exam !== null && p.days_until_exam * 24 < 72)
+
+        const sessionDates = [...new Set((sessions || []).map((s: any) => s.session_date))].sort()
+        let maxStreak = 0, streak = 0
+        for (let i = 0; i < sessionDates.length; i++) {
+            if (i === 0) { streak = 1 } else {
+                const diff = (new Date(sessionDates[i]).getTime() - new Date(sessionDates[i - 1]).getTime()) / 86400000
+                streak = diff === 1 ? streak + 1 : 1
+            }
+            maxStreak = Math.max(maxStreak, streak)
+        }
+
+        const gradePoints: Record<string, number> = { 'A': 5, 'B': 4, 'C': 3, 'D': 2, 'E': 1, 'F': 0 }
+        const totalPoints = (gradeEntries || []).reduce((acc: number, e: any) => acc + (gradePoints[e.grade] || 0) * e.units, 0)
+        const totalUnits = (gradeEntries || []).reduce((acc: number, e: any) => acc + e.units, 0)
+        const cgpa = totalUnits > 0 ? totalPoints / totalUnits : 0
+
+        const quiz90 = (quizAttempts || []).filter((q: any) => q.total > 0 && q.score / q.total >= 0.9).length
+        const quiz100 = (quizAttempts || []).filter((q: any) => q.total > 0 && q.score === q.total).length
+        const quiz80x10 = (quizAttempts || []).filter((q: any) => q.total > 0 && q.score / q.total >= 0.8).length >= 10
+
+        const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+        const sessionsIn7Days = (sessions || []).filter((s: any) => new Date(s.created_at) >= sevenDaysAgo).length
+        const nightOwl = (sessions || []).filter((s: any) => { const h = new Date(s.created_at).getHours(); return h >= 0 && h < 4 }).length
+        const earlyBird = (sessions || []).filter((s: any) => new Date(s.created_at).getHours() < 6).length
+
+        const checks: Record<string, boolean> = {
+            deep_diver: totalSessions >= 5,
+            locked_in: totalSessions >= 10,
+            monk_mode: totalSessions >= 30,
+            week_warrior: maxStreak >= 3,
+            unstoppable: maxStreak >= 7,
+            academic_machine: maxStreak >= 14,
+            sharpshooter: quiz90 >= 1,
+            perfect_run: quiz100 >= 1,
+            exam_slayer: quiz80x10,
+            rising_star: cgpa > 3.0,
+            honor_roll: cgpa > 4.0,
+            deans_list: cgpa > 4.5,
+            ten_hours: totalHours >= 10,
+            twenty_five_hours: totalHours >= 25,
+            fifty_hours: totalHours >= 50,
+            hundred_hours: totalHours >= 100,
+            archivist: materialCount >= 15,
+            knowledge_vault: materialCount >= 25,
+            crisis_manager: panicCount >= 5,
+            against_all_odds: panicUnder72h,
+            night_owl: nightOwl >= 10,
+            early_bird: earlyBird >= 1,
+            survived_finals: sessionsIn7Days >= 15,
+        }
+
+        const META: Record<string, { title: string; description: string; icon: string; rarity: string }> = {
+            deep_diver: { title: 'Deep Diver', description: 'Completed 5 focus sessions', icon: '🤿', rarity: 'Common' },
+            locked_in: { title: 'Locked In', description: 'Completed 10 focus sessions', icon: '🔒', rarity: 'Rare' },
+            monk_mode: { title: 'Monk Mode', description: 'Completed 30 focus sessions', icon: '🧘', rarity: 'Epic' },
+            week_warrior: { title: 'Week Warrior', description: 'Studied 3 consecutive days', icon: '⚔️', rarity: 'Common' },
+            unstoppable: { title: 'Unstoppable', description: 'Studied 7 consecutive days', icon: '🔥', rarity: 'Rare' },
+            academic_machine: { title: 'Academic Machine', description: 'Studied 14 consecutive days', icon: '🤖', rarity: 'Legendary' },
+            sharpshooter: { title: 'Sharpshooter', description: 'Scored 90%+ on a quiz', icon: '🎯', rarity: 'Rare' },
+            perfect_run: { title: 'Perfect Run', description: 'Scored 100% on a quiz', icon: '💯', rarity: 'Epic' },
+            exam_slayer: { title: 'Exam Slayer', description: 'Scored 80%+ on 10 quizzes', icon: '🗡️', rarity: 'Legendary' },
+            rising_star: { title: 'Rising Star', description: 'CGPA above 3.0', icon: '⭐', rarity: 'Common' },
+            honor_roll: { title: 'Honor Roll', description: 'CGPA above 4.0', icon: '🏅', rarity: 'Rare' },
+            deans_list: { title: "Dean's List", description: 'CGPA above 4.5', icon: '🎖️', rarity: 'Epic' },
+            ten_hours: { title: '10 Hours Strong', description: 'Studied 10 total hours', icon: '⏱️', rarity: 'Common' },
+            twenty_five_hours: { title: 'Grind Mode', description: 'Studied 25 total hours', icon: '💪', rarity: 'Rare' },
+            fifty_hours: { title: 'Half Century', description: 'Studied 50 total hours', icon: '🔋', rarity: 'Epic' },
+            hundred_hours: { title: 'Century Scholar', description: 'Studied 100 total hours', icon: '👑', rarity: 'Legendary' },
+            archivist: { title: 'Archivist', description: 'Stored 15 study materials', icon: '📚', rarity: 'Rare' },
+            knowledge_vault: { title: 'Knowledge Vault', description: 'Stored 25 study materials', icon: '🏛️', rarity: 'Epic' },
+            crisis_manager: { title: 'Crisis Manager', description: 'Generated 5 panic plans', icon: '🚨', rarity: 'Rare' },
+            against_all_odds: { title: 'Against All Odds', description: 'Panic plan under 72 hours to exam', icon: '⚡', rarity: 'Epic' },
+            night_owl: { title: 'Night Owl', description: 'Studied after midnight 10 times', icon: '🦉', rarity: 'Rare' },
+            early_bird: { title: 'Early Bird', description: 'Completed a session before 6 AM', icon: '🌅', rarity: 'Rare' },
+            survived_finals: { title: 'Survived Finals', description: '15 sessions in 7 days', icon: '🎓', rarity: 'Legendary' },
+        }
+
+        for (const [key, unlocked] of Object.entries(checks)) {
+            if (unlocked && !existingKeys.includes(key)) {
+                await supabase.from('achievements').insert({ user_id: userId, achievement_key: key })
+                setAchievementPopup(META[key])
+                break // show one at a time
+            }
+        }
     }
 
     if (loading) return (
@@ -373,6 +484,29 @@ export default function Dashboard() {
                     </div>
                 </div>
             )}
+            {/* Achievement Popup */}
+            {achievementPopup && (
+                <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
+                    <div style={{ background: '#111110', border: `1px solid ${achievementPopup.rarity === 'Legendary' ? '#f59e0b50' : achievementPopup.rarity === 'Epic' ? '#a855f750' : achievementPopup.rarity === 'Rare' ? '#3b82f650' : '#8a8a7a50'}`, borderRadius: '20px', padding: '2.5rem 2rem', maxWidth: '360px', width: '100%', textAlign: 'center' }}>
+                        <p style={{ fontSize: '0.68rem', color: '#5a5a4a', fontFamily: 'monospace', letterSpacing: '0.15em', textTransform: 'uppercase', marginBottom: '1rem' }}>Achievement Unlocked</p>
+                        <div style={{ width: '80px', height: '80px', borderRadius: '18px', margin: '0 auto 1.25rem', background: 'rgba(245,158,11,0.08)', border: '2px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '2.5rem' }}>
+                            {achievementPopup.icon}
+                        </div>
+                        <p style={{ fontSize: '1.25rem', fontWeight: 800, marginBottom: '0.35rem' }}>{achievementPopup.title}</p>
+                        <p style={{ fontSize: '0.85rem', color: '#8a8a7a', marginBottom: '0.75rem', lineHeight: 1.5 }}>{achievementPopup.description}</p>
+                        <span style={{ display: 'inline-block', fontSize: '0.7rem', fontFamily: 'monospace', letterSpacing: '0.08em', padding: '0.25rem 0.75rem', borderRadius: '6px', marginBottom: '1.5rem', color: '#f59e0b', background: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)', fontWeight: 700 }}>
+                            {achievementPopup.rarity.toUpperCase()}
+                        </span>
+                        <button onClick={() => setAchievementPopup(null)} style={{ display: 'block', width: '100%', padding: '0.85rem', borderRadius: '10px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                            Let's go! 🎉
+                        </button>
+                    </div>
+                </div>
+            )}
         </main>
     )
 }
+function checkAchievements(id: string) {
+    throw new Error('Function not implemented.')
+}
+

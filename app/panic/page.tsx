@@ -132,10 +132,11 @@ export default function PanicMode() {
                 focusSessions: parsed.focusSessions,
                 motivationTip: parsed.motivationTip,
             })
+            // Save to panic_plans
             if (user) {
                 await supabase.from('panic_plans').insert({
                     user_id: user.id,
-                    exam_name: examName || 'Unnamed Exam',
+                    exam_name: examName || null,
                     days_until_exam: daysLeft,
                 })
             }
