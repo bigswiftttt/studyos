@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 
 type MCQ = {
@@ -15,6 +15,39 @@ type ExamQuestion = {
   type: string
   marks: number
   hint: string
+}
+
+const DAILY_LIMIT = 5
+
+const ACCEPTED_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'text/plain',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+]
+
+const FILE_LABELS: Record<string, string> = {
+  'application/pdf': 'PDF',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
+  'text/plain': 'TXT',
+  'image/jpeg': 'Image',
+  'image/png': 'Image',
+  'image/webp': 'Image',
+}
+
+function getMidnightCountdown() {
+  const now = new Date()
+  const midnight = new Date()
+  midnight.setHours(24, 0, 0, 0)
+  const diff = midnight.getTime() - now.getTime()
+  const h = Math.floor(diff / 3600000)
+  const m = Math.floor((diff % 3600000) / 60000)
+  const s = Math.floor((diff % 60000) / 1000)
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 export default function Assistant() {
@@ -37,23 +70,45 @@ export default function Assistant() {
   const [mcqDifficulty, setMcqDifficulty] = useState('medium')
   const [user, setUser] = useState<any>(null)
   const [quizSaved, setQuizSaved] = useState(false)
+  const [usageCount, setUsageCount] = useState(0)
+  const [countdown, setCountdown] = useState('')
+  const [generatedOnce, setGeneratedOnce] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) setUser(user)
+      if (user) { setUser(user); fetchUsageCount(user.id) }
     })
   }, [])
+
+  // Countdown timer
+  useEffect(() => {
+    if (usageCount < DAILY_LIMIT) return
+    const interval = setInterval(() => setCountdown(getMidnightCountdown()), 1000)
+    setCountdown(getMidnightCountdown())
+    return () => clearInterval(interval)
+  }, [usageCount])
+
+  const fetchUsageCount = async (userId: string) => {
+    const today = new Date().toISOString().split('T')[0]
+    const { count } = await supabase
+      .from('study_materials')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('created_at', `${today}T00:00:00`)
+    setUsageCount(count || 0)
+  }
 
   const saveMaterial = async (summaryText: string, flashcardsData: any[], mcqsData: any[], examQsData: any[], filename: string) => {
     if (!user) return
     await supabase.from('study_materials').insert({
       user_id: user.id,
-      title: filename.replace('.pdf', ''),
+      title: filename.replace(/\.[^/.]+$/, ''),
       summary: summaryText,
       flashcards: flashcardsData,
       mcqs: mcqsData,
       exam_questions: examQsData,
     })
+    setUsageCount(c => c + 1)
   }
 
   const saveQuizAttempt = async (finalScore: number, total: number) => {
@@ -70,11 +125,12 @@ export default function Assistant() {
     e.preventDefault()
     setDragging(false)
     const dropped = e.dataTransfer.files[0]
-    if (dropped?.type === 'application/pdf') setFile(dropped)
+    if (dropped && ACCEPTED_TYPES.includes(dropped.type)) setFile(dropped)
+    else setError('Unsupported file type.')
   }
 
   const generate = async () => {
-    if (!file) return
+    if (!file || usageCount >= DAILY_LIMIT) return
     setLoading(true)
     setError('')
     setSummary('')
@@ -89,10 +145,12 @@ export default function Assistant() {
     setQuizSaved(false)
 
     try {
-      setStep('📄 Extracting text from PDF...')
-      const formData1 = new FormData()
-      formData1.append('pdf', file)
-      const summaryRes = await fetch('/api/summarize', { method: 'POST', body: formData1 })
+      const formData = new FormData()
+      // Use 'file' key for all types, API routes handle accordingly
+      formData.append('pdf', file)
+
+      setStep('📄 Extracting content...')
+      const summaryRes = await fetch('/api/summarize', { method: 'POST', body: formData })
       const summaryData = await summaryRes.json()
       if (summaryData.error) throw new Error(summaryData.error)
       setSummary(summaryData.summary)
@@ -129,7 +187,11 @@ export default function Assistant() {
         file.name
       )
 
-      setActiveTab('summary')
+      // Only set to summary on first generation, not after
+      if (!generatedOnce) {
+        setActiveTab('summary')
+        setGeneratedOnce(true)
+      }
       setStep('')
     } catch (err: any) {
       setError(err.message)
@@ -150,12 +212,12 @@ export default function Assistant() {
     setCurrentQ(q => q + 1)
   }
 
-  // Save quiz score when quiz completes
   const handleQuizComplete = async (finalScore: number) => {
     await saveQuizAttempt(finalScore, mcqs.length)
   }
 
   const tabs = ['summary', 'flashcards', 'mcqs', 'examquestions']
+  const limitReached = usageCount >= DAILY_LIMIT
 
   const selectStyle = {
     width: '100%', padding: '0.65rem 0.9rem',
@@ -196,39 +258,101 @@ export default function Assistant() {
             AI Study Assistant
           </h1>
           <p style={{ fontSize: '0.85rem', color: '#5a5a4a' }}>
-            Upload your lecture notes — get summaries, flashcards, MCQs and exam questions instantly
+            Upload your notes — get summaries, flashcards, MCQs and exam questions instantly
           </p>
         </div>
 
+        {/* Daily limit banner */}
+        {limitReached ? (
+          <div style={{
+            background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
+            borderRadius: '12px', padding: '1.25rem 1.5rem', marginBottom: '1.5rem',
+            textAlign: 'center'
+          }}>
+            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#f87171', marginBottom: '0.35rem' }}>
+              Daily limit reached (5/5)
+            </p>
+            <p style={{ fontSize: '0.78rem', color: '#5a5a4a', marginBottom: '0.5rem' }}>
+              Resets at midnight
+            </p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 900, fontFamily: 'monospace', color: '#f59e0b', letterSpacing: '0.05em' }}>
+              {countdown}
+            </p>
+          </div>
+        ) : (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            background: '#111110', border: '1px solid #1f1f18',
+            borderRadius: '10px', padding: '0.75rem 1rem', marginBottom: '1.5rem'
+          }}>
+            <p style={{ fontSize: '0.78rem', color: '#5a5a4a' }}>Daily generations</p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.3rem' }}>
+                {Array.from({ length: DAILY_LIMIT }).map((_, i) => (
+                  <div key={i} style={{
+                    width: '8px', height: '8px', borderRadius: '50%',
+                    background: i < usageCount ? '#f59e0b' : '#2a2a22'
+                  }} />
+                ))}
+              </div>
+              <p style={{ fontSize: '0.78rem', color: '#5a5a4a', fontFamily: 'monospace' }}>
+                {usageCount}/{DAILY_LIMIT}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Upload Zone */}
         <div
           onDrop={handleDrop}
           onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
-          onClick={() => document.getElementById('fileInput')?.click()}
+          onClick={() => !limitReached && document.getElementById('fileInput')?.click()}
           style={{
             border: `2px dashed ${dragging ? '#f59e0b' : '#2a2a22'}`,
             borderRadius: '14px', padding: '3rem 2rem',
-            textAlign: 'center', cursor: 'pointer',
+            textAlign: 'center', cursor: limitReached ? 'not-allowed' : 'pointer',
             background: dragging ? 'rgba(245,158,11,0.04)' : '#111110',
-            transition: 'all 0.2s', marginBottom: '1rem'
+            transition: 'all 0.2s', marginBottom: '1rem',
+            opacity: limitReached ? 0.5 : 1
           }}
         >
-          <input id="fileInput" type="file" accept=".pdf" style={{ display: 'none' }}
-            onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          <input id="fileInput" type="file"
+            accept=".pdf,.docx,.pptx,.txt,.jpg,.jpeg,.png,.webp"
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              const f = e.target.files?.[0]
+              if (f && ACCEPTED_TYPES.includes(f.type)) setFile(f)
+              else if (f) setError('Unsupported file type.')
+            }} />
           <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📄</div>
           {file ? (
             <div>
               <p style={{ fontWeight: 700, color: '#f59e0b', marginBottom: '0.25rem' }}>{file.name}</p>
-              <p style={{ fontSize: '0.8rem', color: '#5a5a4a' }}>{(file.size / 1024 / 1024).toFixed(2)} MB · PDF ready</p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                <span style={{
+                  fontSize: '0.65rem', fontFamily: 'monospace', fontWeight: 700,
+                  padding: '0.15rem 0.5rem', borderRadius: '4px',
+                  background: 'rgba(245,158,11,0.1)', color: '#f59e0b',
+                  border: '1px solid rgba(245,158,11,0.2)'
+                }}>
+                  {FILE_LABELS[file.type] || 'FILE'}
+                </span>
+                <p style={{ fontSize: '0.8rem', color: '#5a5a4a' }}>{(file.size / 1024 / 1024).toFixed(2)} MB</p>
+              </div>
             </div>
           ) : (
             <div>
-              <p style={{ fontWeight: 600, marginBottom: '0.35rem' }}>Drop your PDF here</p>
-              <p style={{ fontSize: '0.8rem', color: '#5a5a4a' }}>or click to browse · PDF files only</p>
+              <p style={{ fontWeight: 600, marginBottom: '0.35rem' }}>Drop your file here</p>
+              <p style={{ fontSize: '0.78rem', color: '#5a5a4a' }}>or click to browse</p>
+              <p style={{ fontSize: '0.7rem', color: '#3a3a30', marginTop: '0.35rem', fontFamily: 'monospace' }}>
+                PDF · DOCX · PPTX · TXT · JPG · PNG
+              </p>
             </div>
           )}
         </div>
 
+        {/* MCQ Settings */}
         <div style={{
           display: 'flex', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap',
           background: '#111110', border: '1px solid #1f1f18',
@@ -255,15 +379,16 @@ export default function Assistant() {
           </div>
         </div>
 
-        <button onClick={generate} disabled={!file || loading} style={{
+        {/* Generate Button */}
+        <button onClick={generate} disabled={!file || loading || limitReached} style={{
           width: '100%', padding: '1rem', borderRadius: '10px', border: 'none',
-          background: file && !loading ? '#f59e0b' : '#1a1a14',
-          color: file && !loading ? '#0d0d0a' : '#3a3a30',
+          background: file && !loading && !limitReached ? '#f59e0b' : '#1a1a14',
+          color: file && !loading && !limitReached ? '#0d0d0a' : '#3a3a30',
           fontSize: '0.95rem', fontWeight: 700,
-          cursor: file && !loading ? 'pointer' : 'not-allowed',
+          cursor: file && !loading && !limitReached ? 'pointer' : 'not-allowed',
           fontFamily: 'inherit', marginBottom: '2rem', transition: 'all 0.2s'
         }}>
-          {loading ? step || 'Generating...' : file ? 'Generate Study Materials →' : 'Upload a PDF to get started'}
+          {loading ? step || 'Generating...' : limitReached ? 'Daily limit reached' : file ? 'Generate Study Materials →' : 'Upload a file to get started'}
         </button>
 
         {error && (
@@ -274,6 +399,7 @@ export default function Assistant() {
           }}>⚠️ {error}</div>
         )}
 
+        {/* Tabs */}
         <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
           {tabs.map((tab) => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{
@@ -291,8 +417,10 @@ export default function Assistant() {
           ))}
         </div>
 
+        {/* Tab Content */}
         <div style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '14px', padding: '2rem' }}>
 
+          {/* Summary */}
           {activeTab === 'summary' && (
             summary ? (
               <div>
@@ -312,11 +440,12 @@ export default function Assistant() {
             ) : (
               <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                 <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📝</p>
-                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>Upload a PDF and click Generate to see your summary here</p>
+                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>Upload a file and click Generate to see your summary here</p>
               </div>
             )
           )}
 
+          {/* Flashcards */}
           {activeTab === 'flashcards' && (
             flashcards.length > 0 ? (
               <div>
@@ -359,11 +488,12 @@ export default function Assistant() {
             ) : (
               <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                 <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🃏</p>
-                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>Upload a PDF and click Generate to see flashcards here</p>
+                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>Upload a file and click Generate to see flashcards here</p>
               </div>
             )
           )}
 
+          {/* MCQs */}
           {activeTab === 'mcqs' && (
             mcqs.length > 0 ? (
               currentQ < mcqs.length ? (
@@ -421,11 +551,12 @@ export default function Assistant() {
             ) : (
               <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                 <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>❓</p>
-                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>Upload a PDF and click Generate to see your MCQ quiz here</p>
+                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>Upload a file and click Generate to see your MCQ quiz here</p>
               </div>
             )
           )}
 
+          {/* Exam Questions */}
           {activeTab === 'examquestions' && (
             examQuestions.length > 0 ? (
               <div>
@@ -455,7 +586,7 @@ export default function Assistant() {
             ) : (
               <div style={{ textAlign: 'center', padding: '3rem 0' }}>
                 <p style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>🎯</p>
-                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>Upload a PDF and click Generate to see likely exam questions here</p>
+                <p style={{ fontSize: '0.875rem', color: '#5a5a4a' }}>Upload a file and click Generate to see likely exam questions here</p>
               </div>
             )
           )}
