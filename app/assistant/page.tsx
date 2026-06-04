@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 
 type MCQ = {
@@ -16,8 +16,6 @@ type ExamQuestion = {
   marks: number
   hint: string
 }
-
-const DAILY_LIMIT = 5
 
 const ACCEPTED_TYPES = [
   'application/pdf',
@@ -37,17 +35,6 @@ const FILE_LABELS: Record<string, string> = {
   'image/jpeg': 'Image',
   'image/png': 'Image',
   'image/webp': 'Image',
-}
-
-function getMidnightCountdown() {
-  const now = new Date()
-  const midnight = new Date()
-  midnight.setHours(24, 0, 0, 0)
-  const diff = midnight.getTime() - now.getTime()
-  const h = Math.floor(diff / 3600000)
-  const m = Math.floor((diff % 3600000) / 60000)
-  const s = Math.floor((diff % 60000) / 1000)
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
 }
 
 export default function Assistant() {
@@ -70,33 +57,13 @@ export default function Assistant() {
   const [mcqDifficulty, setMcqDifficulty] = useState('medium')
   const [user, setUser] = useState<any>(null)
   const [quizSaved, setQuizSaved] = useState(false)
-  const [usageCount, setUsageCount] = useState(0)
-  const [countdown, setCountdown] = useState('')
   const [generatedOnce, setGeneratedOnce] = useState(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
-      if (user) { setUser(user); fetchUsageCount(user.id) }
+      if (user) setUser(user)
     })
   }, [])
-
-  // Countdown timer
-  useEffect(() => {
-    if (usageCount < DAILY_LIMIT) return
-    const interval = setInterval(() => setCountdown(getMidnightCountdown()), 1000)
-    setCountdown(getMidnightCountdown())
-    return () => clearInterval(interval)
-  }, [usageCount])
-
-  const fetchUsageCount = async (userId: string) => {
-    const today = new Date().toISOString().split('T')[0]
-    const { count } = await supabase
-      .from('study_materials')
-      .select('*', { count: 'exact', head: true })
-      .eq('user_id', userId)
-      .gte('created_at', `${today}T00:00:00`)
-    setUsageCount(count || 0)
-  }
 
   const saveMaterial = async (summaryText: string, flashcardsData: any[], mcqsData: any[], examQsData: any[], filename: string) => {
     if (!user) return
@@ -108,7 +75,6 @@ export default function Assistant() {
       mcqs: mcqsData,
       exam_questions: examQsData,
     })
-    setUsageCount(c => c + 1)
   }
 
   const saveQuizAttempt = async (finalScore: number, total: number) => {
@@ -130,7 +96,7 @@ export default function Assistant() {
   }
 
   const generate = async () => {
-    if (!file || usageCount >= DAILY_LIMIT) return
+    if (!file) return
     setLoading(true)
     setError('')
     setSummary('')
@@ -145,12 +111,10 @@ export default function Assistant() {
     setQuizSaved(false)
 
     try {
-      const formData = new FormData()
-      // Use 'file' key for all types, API routes handle accordingly
-      formData.append('pdf', file)
-
       setStep('📄 Extracting content...')
-      const summaryRes = await fetch('/api/summarize', { method: 'POST', body: formData })
+      const formData1 = new FormData()
+      formData1.append('pdf', file)
+      const summaryRes = await fetch('/api/summarize', { method: 'POST', body: formData1 })
       const summaryData = await summaryRes.json()
       if (summaryData.error) throw new Error(summaryData.error)
       setSummary(summaryData.summary)
@@ -187,7 +151,6 @@ export default function Assistant() {
         file.name
       )
 
-      // Only set to summary on first generation, not after
       if (!generatedOnce) {
         setActiveTab('summary')
         setGeneratedOnce(true)
@@ -217,7 +180,6 @@ export default function Assistant() {
   }
 
   const tabs = ['summary', 'flashcards', 'mcqs', 'examquestions']
-  const limitReached = usageCount >= DAILY_LIMIT
 
   const selectStyle = {
     width: '100%', padding: '0.65rem 0.9rem',
@@ -262,59 +224,18 @@ export default function Assistant() {
           </p>
         </div>
 
-        {/* Daily limit banner */}
-        {limitReached ? (
-          <div style={{
-            background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
-            borderRadius: '12px', padding: '1.25rem 1.5rem', marginBottom: '1.5rem',
-            textAlign: 'center'
-          }}>
-            <p style={{ fontSize: '0.875rem', fontWeight: 700, color: '#f87171', marginBottom: '0.35rem' }}>
-              Daily limit reached (5/5)
-            </p>
-            <p style={{ fontSize: '0.78rem', color: '#5a5a4a', marginBottom: '0.5rem' }}>
-              Resets at midnight
-            </p>
-            <p style={{ fontSize: '1.5rem', fontWeight: 900, fontFamily: 'monospace', color: '#f59e0b', letterSpacing: '0.05em' }}>
-              {countdown}
-            </p>
-          </div>
-        ) : (
-          <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            background: '#111110', border: '1px solid #1f1f18',
-            borderRadius: '10px', padding: '0.75rem 1rem', marginBottom: '1.5rem'
-          }}>
-            <p style={{ fontSize: '0.78rem', color: '#5a5a4a' }}>Daily generations</p>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <div style={{ display: 'flex', gap: '0.3rem' }}>
-                {Array.from({ length: DAILY_LIMIT }).map((_, i) => (
-                  <div key={i} style={{
-                    width: '8px', height: '8px', borderRadius: '50%',
-                    background: i < usageCount ? '#f59e0b' : '#2a2a22'
-                  }} />
-                ))}
-              </div>
-              <p style={{ fontSize: '0.78rem', color: '#5a5a4a', fontFamily: 'monospace' }}>
-                {usageCount}/{DAILY_LIMIT}
-              </p>
-            </div>
-          </div>
-        )}
-
         {/* Upload Zone */}
         <div
           onDrop={handleDrop}
           onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
           onDragLeave={() => setDragging(false)}
-          onClick={() => !limitReached && document.getElementById('fileInput')?.click()}
+          onClick={() => document.getElementById('fileInput')?.click()}
           style={{
             border: `2px dashed ${dragging ? '#f59e0b' : '#2a2a22'}`,
             borderRadius: '14px', padding: '3rem 2rem',
-            textAlign: 'center', cursor: limitReached ? 'not-allowed' : 'pointer',
+            textAlign: 'center', cursor: 'pointer',
             background: dragging ? 'rgba(245,158,11,0.04)' : '#111110',
-            transition: 'all 0.2s', marginBottom: '1rem',
-            opacity: limitReached ? 0.5 : 1
+            transition: 'all 0.2s', marginBottom: '1rem'
           }}
         >
           <input id="fileInput" type="file"
@@ -322,7 +243,7 @@ export default function Assistant() {
             style={{ display: 'none' }}
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f && ACCEPTED_TYPES.includes(f.type)) setFile(f)
+              if (f && ACCEPTED_TYPES.includes(f.type)) { setFile(f); setError('') }
               else if (f) setError('Unsupported file type.')
             }} />
           <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📄</div>
@@ -380,15 +301,15 @@ export default function Assistant() {
         </div>
 
         {/* Generate Button */}
-        <button onClick={generate} disabled={!file || loading || limitReached} style={{
+        <button onClick={generate} disabled={!file || loading} style={{
           width: '100%', padding: '1rem', borderRadius: '10px', border: 'none',
-          background: file && !loading && !limitReached ? '#f59e0b' : '#1a1a14',
-          color: file && !loading && !limitReached ? '#0d0d0a' : '#3a3a30',
+          background: file && !loading ? '#f59e0b' : '#1a1a14',
+          color: file && !loading ? '#0d0d0a' : '#3a3a30',
           fontSize: '0.95rem', fontWeight: 700,
-          cursor: file && !loading && !limitReached ? 'pointer' : 'not-allowed',
+          cursor: file && !loading ? 'pointer' : 'not-allowed',
           fontFamily: 'inherit', marginBottom: '2rem', transition: 'all 0.2s'
         }}>
-          {loading ? step || 'Generating...' : limitReached ? 'Daily limit reached' : file ? 'Generate Study Materials →' : 'Upload a file to get started'}
+          {loading ? step || 'Generating...' : file ? 'Generate Study Materials →' : 'Upload a file to get started'}
         </button>
 
         {error && (
