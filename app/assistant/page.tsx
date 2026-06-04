@@ -41,6 +41,15 @@ export default function Assistant() {
       if (user) setUser(user)
     })
   }, [])
+  useEffect(() => {
+    if (mcqs.length > 0 && currentQ >= mcqs.length && user) {
+      supabase.from('quiz_attempts').insert({
+        user_id: user.id,
+        score,
+        total: mcqs.length,
+      })
+    }
+  }, [currentQ, mcqs.length])
 
   const saveMaterial = async (summaryText: string, flashcardsData: any[], mcqsData: any[], examQsData: any[], filename: string) => {
     if (!user) return

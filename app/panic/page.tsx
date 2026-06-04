@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { supabase } from '../lib/supabase'
 
 const CONFIDENCE_LEVELS = [
     { value: 'cooked', label: '💀 Cooked', color: '#ef4444' },
@@ -46,7 +47,13 @@ export default function PanicMode() {
     const [result, setResult] = useState<PlanResult | null>(null)
     const [error, setError] = useState('')
     const [step, setStep] = useState('')
+    const [user, setUser] = useState<any>(null)
 
+    useEffect(() => {
+        supabase.auth.getUser().then(({ data: { user } }) => {
+            if (user) setUser(user)
+        })
+    }, [])
     const getDaysUntilExam = () => {
         if (!examDate) return null
         const today = new Date()
@@ -125,7 +132,13 @@ export default function PanicMode() {
                 focusSessions: parsed.focusSessions,
                 motivationTip: parsed.motivationTip,
             })
-
+            if (user) {
+                await supabase.from('panic_plans').insert({
+                    user_id: user.id,
+                    exam_name: examName || 'Unnamed Exam',
+                    days_until_exam: daysLeft,
+                })
+            }
             setStep('')
         } catch (err: any) {
             setError('Failed to generate plan. Please try again.')
