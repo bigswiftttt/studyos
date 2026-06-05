@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   try {
     const formData = await req.formData()
     const file = formData.get('pdf') as File
-    const count = parseInt(formData.get('count') as string) || 8
+    const count = Math.min(parseInt(formData.get('count') as string) || 8, 40)
     const difficulty = formData.get('difficulty') as string || 'medium'
 
     if (!file) {
@@ -86,9 +86,12 @@ export async function POST(req: NextRequest) {
       exam: 'challenging exam-style questions similar to university or professional exams'
     }[difficulty] || 'medium difficulty'
 
+    // Scale text input based on question count — more questions need more context
+    const textLimit = count <= 10 ? 4000 : count <= 20 ? 8000 : count <= 30 ? 12000 : 16000
+
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
-      max_tokens: 3000,
+      max_tokens: count <= 10 ? 3000 : count <= 20 ? 5000 : count <= 30 ? 7000 : 9000,
       messages: [
         {
           role: 'system',
@@ -98,6 +101,8 @@ export async function POST(req: NextRequest) {
           role: 'user',
           content: `Generate exactly ${count} multiple choice questions from these lecture notes.
 Difficulty level: ${difficultyGuide}
+
+Spread the questions evenly across ALL major topics in the notes. Do not focus on just one section.
 
 Return ONLY a JSON array:
 [
@@ -112,7 +117,7 @@ Return ONLY a JSON array:
 Where "correct" is the index (0-3) of the right answer.
 
 Notes:
-${text.slice(0, 6000)}`
+${text.slice(0, textLimit)}`
         }
       ]
     })
