@@ -115,7 +115,7 @@ export default function FocusMode() {
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1)
       osc.start(ctx.currentTime)
       osc.stop(ctx.currentTime + 1)
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const startAmbient = (type: string) => {
@@ -145,14 +145,14 @@ export default function FocusMode() {
       }
       noiseRef.current = node
       node.connect(ctx.destination)
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const stopAmbient = () => {
     try {
       noiseRef.current?.disconnect()
       audioCtxRef.current?.close()
-    } catch (e) {}
+    } catch (e) { }
   }
 
   const handleSoundChange = (s: string) => {
@@ -183,7 +183,7 @@ export default function FocusMode() {
   const totalMinsToday = todaySessions.reduce((acc, s) => acc + s.duration_mins, 0)
 
   return (
-    <main style={{minHeight: '100vh', background: '#0d0d0a', color: '#f5f5f0', fontFamily: 'Inter, sans-serif'}}>
+    <main style={{ minHeight: '100vh', background: '#0d0d0a', color: '#f5f5f0', fontFamily: 'Inter, sans-serif' }}>
 
       <nav style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -191,25 +191,25 @@ export default function FocusMode() {
         position: 'sticky', top: 0, zIndex: 40,
         background: 'rgba(13,13,10,0.92)', backdropFilter: 'blur(12px)'
       }}>
-        <span style={{fontWeight: 900, fontSize: '1rem', letterSpacing: '-0.02em'}}>
-          Study<span style={{color: '#f59e0b'}}>OS</span>
+        <span style={{ fontWeight: 900, fontSize: '1rem', letterSpacing: '-0.02em' }}>
+          Study<span style={{ color: '#f59e0b' }}>OS</span>
         </span>
-        <a href="/dashboard" style={{fontSize: '0.82rem', color: '#5a5a4a', textDecoration: 'none', fontWeight: 500}}>
+        <a href="/dashboard" style={{ fontSize: '0.82rem', color: '#5a5a4a', textDecoration: 'none', fontWeight: 500 }}>
           ← Dashboard
         </a>
       </nav>
 
-      <div style={{maxWidth: '680px', margin: '0 auto', padding: '3rem 1.5rem'}}>
+      <div style={{ maxWidth: '680px', margin: '0 auto', padding: '3rem 1.5rem' }}>
 
-        <div style={{marginBottom: '2.5rem'}}>
-          <h1 style={{fontSize: 'clamp(1.25rem, 4vw, 1.75rem)', fontWeight: 800, letterSpacing: '-0.025em', marginBottom: '0.4rem'}}>
+        <div style={{ marginBottom: '2.5rem' }}>
+          <h1 style={{ fontSize: 'clamp(1.25rem, 4vw, 1.75rem)', fontWeight: 800, letterSpacing: '-0.025em', marginBottom: '0.4rem' }}>
             Focus Mode
           </h1>
-          <p style={{fontSize: '0.85rem', color: '#5a5a4a'}}>Stay in the zone. One session at a time.</p>
+          <p style={{ fontSize: '0.85rem', color: '#5a5a4a' }}>Stay in the zone. One session at a time.</p>
         </div>
 
         {/* Mode Selector */}
-        <div style={{display: 'flex', gap: '0.5rem', marginBottom: '3rem', background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '0.4rem'}}>
+        <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '3rem', background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '0.4rem' }}>
           {(Object.keys(MODES) as Array<keyof typeof MODES>).map((m) => (
             <button key={m} onClick={() => switchMode(m)} style={{
               flex: 1, padding: '0.6rem', borderRadius: '8px', border: 'none',
@@ -224,17 +224,17 @@ export default function FocusMode() {
         </div>
 
         {/* Timer Circle */}
-        <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '3rem'}}>
-          <div style={{position: 'relative', width: '280px', height: '280px', marginBottom: '2rem'}}>
-            <svg width="280" height="280" style={{position: 'absolute', top: 0, left: 0, transform: 'rotate(-90deg)'}}>
-              <circle cx="140" cy="140" r="120" fill="none" stroke="#1f1f18" strokeWidth="6"/>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '3rem' }}>
+          <div style={{ position: 'relative', width: '280px', height: '280px', marginBottom: '2rem' }}>
+            <svg width="280" height="280" style={{ position: 'absolute', top: 0, left: 0, transform: 'rotate(-90deg)' }}>
+              <circle cx="140" cy="140" r="120" fill="none" stroke="#1f1f18" strokeWidth="6" />
               <circle
                 cx="140" cy="140" r="120" fill="none"
                 stroke={accent} strokeWidth="6"
                 strokeDasharray={circumference}
                 strokeDashoffset={circumference * (1 - progress)}
                 strokeLinecap="round"
-                style={{transition: 'stroke-dashoffset 1s linear'}}
+                style={{ transition: 'stroke-dashoffset 1s linear' }}
               />
             </svg>
             <div style={{
@@ -242,17 +242,17 @@ export default function FocusMode() {
               display: 'flex', flexDirection: 'column',
               alignItems: 'center', justifyContent: 'center'
             }}>
-              <div style={{fontSize: '3.5rem', fontWeight: 900, letterSpacing: '-0.04em', fontFamily: 'monospace', color: accent}}>
+              <div style={{ fontSize: '3.5rem', fontWeight: 900, letterSpacing: '-0.04em', fontFamily: 'monospace', color: accent }}>
                 {mins}:{secs}
               </div>
-              <div style={{fontSize: '0.75rem', color: '#5a5a4a', marginTop: '0.25rem', fontFamily: 'monospace', letterSpacing: '0.1em'}}>
+              <div style={{ fontSize: '0.75rem', color: '#5a5a4a', marginTop: '0.25rem', fontFamily: 'monospace', letterSpacing: '0.1em' }}>
                 {MODES[mode].label.toUpperCase()}
               </div>
             </div>
           </div>
 
           {/* Controls */}
-          <div style={{display: 'flex', gap: '1rem', alignItems: 'center'}}>
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <button onClick={reset} style={{
               padding: '0.75rem 1.5rem', borderRadius: '10px',
               border: '1px solid #2a2a22', background: 'none',
@@ -277,7 +277,7 @@ export default function FocusMode() {
           borderRadius: '12px', padding: '1.25rem 1.5rem',
           marginBottom: '1.5rem', textAlign: 'center'
         }}>
-          <p style={{fontSize: '0.875rem', color: '#8a8a7a', fontStyle: 'italic', lineHeight: 1.6}}>
+          <p style={{ fontSize: '0.875rem', color: '#8a8a7a', fontStyle: 'italic', lineHeight: 1.6 }}>
             "{quote}"
           </p>
         </div>
@@ -288,10 +288,10 @@ export default function FocusMode() {
           borderRadius: '12px', padding: '1.25rem 1.5rem',
           marginBottom: '1.5rem'
         }}>
-          <p style={{fontSize: '0.72rem', color: '#5a5a4a', marginBottom: '0.75rem', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase'}}>
+          <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginBottom: '0.75rem', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             Ambient Sound
           </p>
-          <div style={{display: 'flex', gap: '0.5rem', flexWrap: 'wrap'}}>
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
             {SOUNDS.map((s) => (
               <button key={s.value} onClick={() => handleSoundChange(s.value)} style={{
                 padding: '0.5rem 0.9rem', borderRadius: '8px',
@@ -312,31 +312,31 @@ export default function FocusMode() {
           background: '#111110', border: '1px solid #1f1f18',
           borderRadius: '12px', padding: '1.25rem 1.5rem'
         }}>
-          <p style={{fontSize: '0.72rem', color: '#5a5a4a', marginBottom: '1rem', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase'}}>
+          <p style={{ fontSize: '0.72rem', color: '#5a5a4a', marginBottom: '1rem', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}>
             Today's Sessions
           </p>
-          <div style={{display: 'flex', gap: '1.5rem', marginBottom: '1rem'}}>
+          <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem' }}>
             <div>
-              <div style={{fontSize: '1.5rem', fontWeight: 800, color: accent}}>{todaySessions.length}</div>
-              <div style={{fontSize: '0.72rem', color: '#5a5a4a'}}>Sessions</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: accent }}>{todaySessions.length}</div>
+              <div style={{ fontSize: '0.72rem', color: '#5a5a4a' }}>Sessions</div>
             </div>
             <div>
-              <div style={{fontSize: '1.5rem', fontWeight: 800, color: accent}}>{totalMinsToday}m</div>
-              <div style={{fontSize: '0.72rem', color: '#5a5a4a'}}>Focus time</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: accent }}>{totalMinsToday}m</div>
+              <div style={{ fontSize: '0.72rem', color: '#5a5a4a' }}>Focus time</div>
             </div>
             <div>
-              <div style={{fontSize: '1.5rem', fontWeight: 800, color: accent}}>{sessions}</div>
-              <div style={{fontSize: '0.72rem', color: '#5a5a4a'}}>This session</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: 800, color: accent }}>{sessions}</div>
+              <div style={{ fontSize: '0.72rem', color: '#5a5a4a' }}>This session</div>
             </div>
           </div>
           {todaySessions.length === 0 ? (
-            <p style={{fontSize: '0.8rem', color: '#3a3a30'}}>No sessions yet today. Start your first one! 🎯</p>
+            <p style={{ fontSize: '0.8rem', color: '#3a3a30' }}>No sessions yet today. Start your first one! 🎯</p>
           ) : (
-            <div style={{display: 'flex', flexDirection: 'column', gap: '0.4rem'}}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
               {todaySessions.slice(0, 5).map((s, i) => (
-                <div key={s.id} style={{display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#5a5a4a'}}>
+                <div key={s.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#5a5a4a' }}>
                   <span>Session {todaySessions.length - i}</span>
-                  <span style={{fontFamily: 'monospace'}}>{s.duration_mins} min</span>
+                  <span style={{ fontFamily: 'monospace' }}>{s.duration_mins} min</span>
                 </div>
               ))}
             </div>

@@ -19,6 +19,7 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true)
     const [courses, setCourses] = useState<any[]>([])
     const [tasks, setTasks] = useState<any[]>([])
+    const [focusStats, setFocusStats] = useState({ todayMins: 0, streak: 0 })
     const [showCourseModal, setShowCourseModal] = useState(false)
     const [showTaskModal, setShowTaskModal] = useState(false)
     const [editCourse, setEditCourse] = useState<any | null>(null)
@@ -38,8 +39,9 @@ export default function Dashboard() {
             if (!user) { router.push('/auth/login'); return }
             setUser(user)
             fetchCourses(user.id)
-            checkAchievements(user.id)
             fetchTasks(user.id)
+            fetchFocusStats(user.id)
+            checkAchievements(user.id)
             setLoading(false)
         }
         init()
@@ -53,6 +55,39 @@ export default function Dashboard() {
     const fetchTasks = async (userId: string) => {
         const { data } = await supabase.from('tasks').select('*').eq('user_id', userId).order('created_at', { ascending: false })
         if (data) setTasks(data)
+    }
+
+    const fetchFocusStats = async (userId: string) => {
+        const today = new Date().toISOString().split('T')[0]
+
+        // Today's minutes
+        const { data: todaySessions } = await supabase
+            .from('focus_sessions')
+            .select('duration_mins')
+            .eq('user_id', userId)
+            .eq('session_date', today)
+
+        const todayMins = (todaySessions || []).reduce((acc, s) => acc + (s.duration_mins || 0), 0)
+
+        // Streak calculation
+        const { data: allSessions } = await supabase
+            .from('focus_sessions')
+            .select('session_date')
+            .eq('user_id', userId)
+            .order('session_date', { ascending: false })
+
+        const uniqueDates = [...new Set((allSessions || []).map((s: any) => s.session_date))] as string[]
+        let streak = 0
+        const now = new Date()
+        for (let i = 0; i < uniqueDates.length; i++) {
+            const expected = new Date(now)
+            expected.setDate(expected.getDate() - i)
+            const expectedStr = expected.toISOString().split('T')[0]
+            if (uniqueDates[i] === expectedStr) streak++
+            else break
+        }
+
+        setFocusStats({ todayMins, streak })
     }
 
     const addCourse = async () => {
@@ -121,6 +156,7 @@ export default function Dashboard() {
         await supabase.from('tasks').update({ completed: !completed }).eq('id', taskId)
         fetchTasks(user.id)
     }
+
     const checkAchievements = async (userId: string) => {
         const [
             { data: sessions },
@@ -226,7 +262,7 @@ export default function Dashboard() {
             if (unlocked && !existingKeys.includes(key)) {
                 await supabase.from('achievements').insert({ user_id: userId, achievement_key: key })
                 setAchievementPopup(META[key])
-                break // show one at a time
+                break
             }
         }
     }
@@ -268,10 +304,10 @@ export default function Dashboard() {
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
                     {[
-                        { label: 'Study Streak', value: '0 days', icon: '🔥' },
+                        { label: 'Study Streak', value: `${focusStats.streak} day${focusStats.streak !== 1 ? 's' : ''}`, icon: '🔥' },
                         { label: 'Courses', value: `${courses.length}`, icon: '📚' },
                         { label: 'Tasks', value: `${tasks.filter(t => !t.completed).length} pending`, icon: '✅' },
-                        { label: 'Focus Today', value: '0 min', icon: '⏱️' },
+                        { label: 'Focus Today', value: `${focusStats.todayMins} min`, icon: '⏱️' },
                     ].map((stat) => (
                         <div key={stat.label} style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.25rem' }}>
                             <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{stat.icon}</div>
@@ -308,7 +344,6 @@ export default function Dashboard() {
                                         </div>
                                         <span style={{ fontSize: '0.85rem', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                                         {s.exam_date && <span style={{ fontSize: '0.7rem', color: '#5a5a4a', flexShrink: 0 }}>{new Date(s.exam_date).toLocaleDateString()}</span>}
-                                        {/* Edit / Delete */}
                                         <div style={{ display: 'flex', gap: '0.3rem', flexShrink: 0 }}>
                                             <button onClick={() => openEditCourse(s)} style={{ padding: '0.25rem 0.5rem', borderRadius: '5px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                                                 Edit
@@ -484,6 +519,7 @@ export default function Dashboard() {
                     </div>
                 </div>
             )}
+
             {/* Achievement Popup */}
             {achievementPopup && (
                 <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.5rem' }}>
@@ -506,7 +542,3 @@ export default function Dashboard() {
         </main>
     )
 }
-function checkAchievements(id: string) {
-    throw new Error('Function not implemented.')
-}
-
