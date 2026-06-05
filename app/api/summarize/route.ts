@@ -79,35 +79,50 @@ export async function POST(req: NextRequest) {
       }, { status: 400 })
     }
 
+    // Scale based on document size
+    const isLarge = text.length > 8000
+    const isVeryLarge = text.length > 16000
+    const textLimit = isVeryLarge ? 24000 : isLarge ? 14000 : 6000
+    const maxTokens = isVeryLarge ? 6000 : isLarge ? 4000 : 2048
+
+    const sizeInstruction = isVeryLarge
+      ? 'This is a very large document. Cover ALL major topics thoroughly. Each section should be detailed with multiple points. Do not skip any major topic.'
+      : isLarge
+        ? 'This is a moderately large document. Make sure to cover all topics present, not just the first few sections.'
+        : 'Create a focused summary covering all key points.'
+
     const completion = await groq.chat.completions.create({
       model: 'llama-3.3-70b-versatile',
-      max_tokens: 2048,
+      max_tokens: maxTokens,
       messages: [
         {
           role: 'system',
-          content: 'You are an expert study assistant who creates clear structured study summaries.'
+          content: 'You are an expert study assistant who creates clear, structured, and comprehensive study summaries. Always cover every major topic present in the document.'
         },
         {
           role: 'user',
-          content: `Analyze these lecture notes and create a comprehensive study summary.
+          content: `Analyze these lecture notes and create a comprehensive study summary. ${sizeInstruction}
 
 ## Overview
-[2-3 sentence overview]
+[2-4 sentence overview of the entire document]
 
 ## Key Concepts
-[5-8 most important concepts]
+[All important concepts — do not limit yourself, cover every major one]
 
 ## Important Definitions
-[Key terms and definitions]
+[All key terms and definitions found in the notes]
+
+## Topic Breakdown
+[Go through each major topic/section in the document and summarize it in 3-5 bullet points]
 
 ## Key Points to Remember
-[Critical facts to memorize]
+[Critical facts and details to memorize for exams]
 
 ## Exam Tips
-[2-3 exam focus tips]
+[3-5 exam focus tips based on what was emphasized in the notes]
 
 Notes:
-${text.slice(0, 6000)}`
+${text.slice(0, textLimit)}`
         }
       ]
     })
