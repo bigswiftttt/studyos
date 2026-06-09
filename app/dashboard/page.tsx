@@ -40,7 +40,7 @@ export default function Dashboard() {
             setUser(user)
             fetchCourses(user.id)
             fetchTasks(user.id)
-            fetchFocusStats(user.id)
+            fetchActivityStats(user.id)
             checkAchievements(user.id)
             setLoading(false)
         }
@@ -57,10 +57,10 @@ export default function Dashboard() {
         if (data) setTasks(data)
     }
 
-    const fetchFocusStats = async (userId: string) => {
+    const fetchActivityStats = async (userId: string) => {
         const today = new Date().toISOString().split('T')[0]
 
-        // Today's minutes
+        // Today's focus minutes
         const { data: todaySessions } = await supabase
             .from('focus_sessions')
             .select('duration_mins')
@@ -69,22 +69,58 @@ export default function Dashboard() {
 
         const todayMins = (todaySessions || []).reduce((acc, s) => acc + (s.duration_mins || 0), 0)
 
-        // Streak calculation
-        const { data: allSessions } = await supabase
-            .from('focus_sessions')
-            .select('session_date')
-            .eq('user_id', userId)
-            .order('session_date', { ascending: false })
+        // Get ALL activity dates — focus sessions + quiz attempts + study materials
+        const [{ data: focusDates }, { data: quizDates }, { data: materialDates }] = await Promise.all([
+            supabase.from('focus_sessions').select('session_date').eq('user_id', userId),
+            supabase.from('quiz_attempts').select('created_at').eq('user_id', userId),
+            supabase.from('study_materials').select('created_at').eq('user_id', userId),
+        ])
 
-        const uniqueDates = [...new Set((allSessions || []).map((s: any) => s.session_date))] as string[]
+        // Collect all unique active dates from all sources
+        const allDates = new Set<string>()
+
+        // Focus session dates
+        ;(focusDates || []).forEach((s: any) => {
+            if (s.session_date) allDates.add(s.session_date)
+        })
+
+        // Quiz attempt dates
+        ;(quizDates || []).forEach((q: any) => {
+            if (q.created_at) allDates.add(q.created_at.split('T')[0])
+        })
+
+        // Study material dates
+        ;(materialDates || []).forEach((m: any) => {
+            if (m.created_at) allDates.add(m.created_at.split('T')[0])
+        })
+
+        // Sort descending
+        const sortedDates = [...allDates].sort((a, b) => b.localeCompare(a))
+
+        // Calculate current streak — allow today OR yesterday as the start
         let streak = 0
-        const now = new Date()
-        for (let i = 0; i < uniqueDates.length; i++) {
-            const expected = new Date(now)
-            expected.setDate(expected.getDate() - i)
-            const expectedStr = expected.toISOString().split('T')[0]
-            if (uniqueDates[i] === expectedStr) streak++
-            else break
+        const todayDate = new Date()
+        todayDate.setHours(0, 0, 0, 0)
+
+        if (sortedDates.length > 0) {
+            const mostRecent = new Date(sortedDates[0])
+            mostRecent.setHours(0, 0, 0, 0)
+
+            const diffFromToday = Math.round((todayDate.getTime() - mostRecent.getTime()) / 86400000)
+
+            // Only count streak if most recent activity was today or yesterday
+            if (diffFromToday <= 1) {
+                streak = 1
+                for (let i = 1; i < sortedDates.length; i++) {
+                    const curr = new Date(sortedDates[i])
+                    const prev = new Date(sortedDates[i - 1])
+                    curr.setHours(0, 0, 0, 0)
+                    prev.setHours(0, 0, 0, 0)
+                    const diff = Math.round((prev.getTime() - curr.getTime()) / 86400000)
+                    if (diff === 1) streak++
+                    else break
+                }
+            }
         }
 
         setFocusStats({ todayMins, streak })
