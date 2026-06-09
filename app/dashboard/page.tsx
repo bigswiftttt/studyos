@@ -308,6 +308,7 @@ export default function Dashboard() {
                         { label: 'Courses', value: `${courses.length}`, icon: '📚' },
                         { label: 'Tasks', value: `${tasks.filter(t => !t.completed).length} pending`, icon: '✅' },
                         { label: 'Focus Today', value: `${focusStats.todayMins} min`, icon: '⏱️' },
+                        { label: 'Statistics', icon: '📊', href: '/statistics', desc: 'View your study performance' },
                     ].map((stat) => (
                         <div key={stat.label} style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.25rem' }}>
                             <div style={{ fontSize: '1.25rem', marginBottom: '0.5rem' }}>{stat.icon}</div>
