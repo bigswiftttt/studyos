@@ -13,6 +13,66 @@ function getGreeting(name: string) {
     return `Welcome back, ${first} 👋`
 }
 
+type Persona = {
+    icon: string
+    title: string
+    description: string
+    color: string
+}
+
+function getPersona(stats: {
+    totalFocusMins: number
+    totalSessions: number
+    quizAttempts: number
+    avgQuizScore: number
+    panicPlans: number
+    streak: number
+    materialsUploaded: number
+    nightSessions: number
+    earlySessions: number
+}): Persona {
+    const { totalFocusMins, totalSessions, quizAttempts, avgQuizScore, panicPlans, streak, materialsUploaded, nightSessions, earlySessions } = stats
+
+    // The Machine — top performer across everything
+    if (totalFocusMins >= 500 && streak >= 7 && avgQuizScore >= 80 && quizAttempts >= 5) {
+        return { icon: '🤖', title: 'The Machine', description: 'Consistent. Relentless. You show up every single day.', color: '#f59e0b' }
+    }
+    // The Scholar — high quiz scores + materials
+    if (avgQuizScore >= 85 && quizAttempts >= 5 && materialsUploaded >= 5) {
+        return { icon: '🧠', title: 'The Scholar', description: 'Deep understanding over everything. You study to actually learn.', color: '#a78bfa' }
+    }
+    // The Perfectionist — very high quiz scores
+    if (avgQuizScore >= 90 && quizAttempts >= 3) {
+        return { icon: '🏆', title: 'The Perfectionist', description: "Nothing less than 100% will do. You don't just pass — you dominate.", color: '#f59e0b' }
+    }
+    // The Grinder — high focus sessions
+    if (totalSessions >= 20 && streak >= 5) {
+        return { icon: '🔥', title: 'The Grinder', description: 'Hours in, hours out. You outwork everyone in the room.', color: '#f97316' }
+    }
+    // The Night Owl — studies late consistently
+    if (nightSessions >= 5) {
+        return { icon: '🦉', title: 'The Night Owl', description: "While everyone's asleep, you're locked in. The night is your study hall.", color: '#818cf8' }
+    }
+    // The Early Bird — studies early
+    if (earlySessions >= 3) {
+        return { icon: '🌅', title: 'The Early Bird', description: 'Up before the sun. You get it done before most people wake up.', color: '#fbbf24' }
+    }
+    // The Crammer — heavy panic mode
+    if (panicPlans >= 3) {
+        return { icon: '⚡', title: 'The Crammer', description: "Pressure activates you. You do your best work when it's last minute.", color: '#ef4444' }
+    }
+    // The Strategist — consistent streak, balanced
+    if (streak >= 5 && quizAttempts >= 2 && totalSessions >= 5) {
+        return { icon: '🎯', title: 'The Strategist', description: 'Planned, consistent, and always one step ahead of the syllabus.', color: '#22c55e' }
+    }
+    // The Collector — uploads lots of materials
+    if (materialsUploaded >= 10) {
+        return { icon: '📚', title: 'The Archivist', description: 'Every note, every slide, every PDF — you collect it all. Knowledge is power.', color: '#60a5fa' }
+    }
+    // The Starter — just beginning
+    return { icon: '🚀', title: 'The Starter', description: "Every legend has a day one. Yours is now — keep going.", color: '#8a8a7a' }
+}
+
 export default function Dashboard() {
     const router = useRouter()
     const [user, setUser] = useState<any>(null)
@@ -20,6 +80,7 @@ export default function Dashboard() {
     const [courses, setCourses] = useState<any[]>([])
     const [tasks, setTasks] = useState<any[]>([])
     const [focusStats, setFocusStats] = useState({ todayMins: 0, streak: 0 })
+    const [persona, setPersona] = useState<Persona | null>(null)
     const [showCourseModal, setShowCourseModal] = useState(false)
     const [showTaskModal, setShowTaskModal] = useState(false)
     const [editCourse, setEditCourse] = useState<any | null>(null)
@@ -60,44 +121,35 @@ export default function Dashboard() {
     const fetchActivityStats = async (userId: string) => {
         const today = new Date().toISOString().split('T')[0]
 
-        // Today's focus minutes
-        const { data: todaySessions } = await supabase
-            .from('focus_sessions')
-            .select('duration_mins')
-            .eq('user_id', userId)
-            .eq('session_date', today)
-
-        const todayMins = (todaySessions || []).reduce((acc, s) => acc + (s.duration_mins || 0), 0)
-
-        // Get ALL activity dates — focus sessions + quiz attempts + study materials
-        const [{ data: focusDates }, { data: quizDates }, { data: materialDates }] = await Promise.all([
+        const [
+            { data: todaySessions },
+            { data: allSessions },
+            { data: quizData },
+            { data: materialData },
+            { data: panicData },
+            { data: focusDates },
+            { data: quizDates },
+            { data: materialDates },
+        ] = await Promise.all([
+            supabase.from('focus_sessions').select('duration_mins').eq('user_id', userId).eq('session_date', today),
+            supabase.from('focus_sessions').select('duration_mins, created_at').eq('user_id', userId),
+            supabase.from('quiz_attempts').select('score, total, created_at').eq('user_id', userId),
+            supabase.from('study_materials').select('created_at').eq('user_id', userId),
+            supabase.from('panic_plans').select('id').eq('user_id', userId),
             supabase.from('focus_sessions').select('session_date').eq('user_id', userId),
             supabase.from('quiz_attempts').select('created_at').eq('user_id', userId),
             supabase.from('study_materials').select('created_at').eq('user_id', userId),
         ])
 
-        // Collect all unique active dates from all sources
+        const todayMins = (todaySessions || []).reduce((acc, s) => acc + (s.duration_mins || 0), 0)
+
+        // Streak calculation
         const allDates = new Set<string>()
+        ;(focusDates || []).forEach((s: any) => { if (s.session_date) allDates.add(s.session_date) })
+        ;(quizDates || []).forEach((q: any) => { if (q.created_at) allDates.add(q.created_at.split('T')[0]) })
+        ;(materialDates || []).forEach((m: any) => { if (m.created_at) allDates.add(m.created_at.split('T')[0]) })
 
-        // Focus session dates
-        ;(focusDates || []).forEach((s: any) => {
-            if (s.session_date) allDates.add(s.session_date)
-        })
-
-        // Quiz attempt dates
-        ;(quizDates || []).forEach((q: any) => {
-            if (q.created_at) allDates.add(q.created_at.split('T')[0])
-        })
-
-        // Study material dates
-        ;(materialDates || []).forEach((m: any) => {
-            if (m.created_at) allDates.add(m.created_at.split('T')[0])
-        })
-
-        // Sort descending
         const sortedDates = [...allDates].sort((a, b) => b.localeCompare(a))
-
-        // Calculate current streak — allow today OR yesterday as the start
         let streak = 0
         const todayDate = new Date()
         todayDate.setHours(0, 0, 0, 0)
@@ -105,10 +157,7 @@ export default function Dashboard() {
         if (sortedDates.length > 0) {
             const mostRecent = new Date(sortedDates[0])
             mostRecent.setHours(0, 0, 0, 0)
-
             const diffFromToday = Math.round((todayDate.getTime() - mostRecent.getTime()) / 86400000)
-
-            // Only count streak if most recent activity was today or yesterday
             if (diffFromToday <= 1) {
                 streak = 1
                 for (let i = 1; i < sortedDates.length; i++) {
@@ -124,17 +173,35 @@ export default function Dashboard() {
         }
 
         setFocusStats({ todayMins, streak })
+
+        // Persona calculation
+        const totalFocusMins = (allSessions || []).reduce((acc, s) => acc + (s.duration_mins || 0), 0)
+        const totalSessions = (allSessions || []).length
+        const quizAttempts = (quizData || []).length
+        const avgQuizScore = quizAttempts > 0
+            ? (quizData || []).reduce((acc, q) => acc + (q.total > 0 ? (q.score / q.total) * 100 : 0), 0) / quizAttempts
+            : 0
+        const panicPlans = (panicData || []).length
+        const materialsUploaded = (materialData || []).length
+        const nightSessions = (allSessions || []).filter((s: any) => {
+            const h = new Date(s.created_at).getHours()
+            return h >= 0 && h < 4
+        }).length
+        const earlySessions = (allSessions || []).filter((s: any) => new Date(s.created_at).getHours() < 6).length
+
+        setPersona(getPersona({
+            totalFocusMins, totalSessions, quizAttempts,
+            avgQuizScore, panicPlans, streak,
+            materialsUploaded, nightSessions, earlySessions
+        }))
     }
 
     const addCourse = async () => {
         if (!courseName.trim()) return
         setSaving(true)
         const { error } = await supabase.from('courses').insert({
-            user_id: user.id,
-            name: courseName,
-            color: '#f59e0b',
-            exam_date: examDate || null,
-            code: courseCode || null,
+            user_id: user.id, name: courseName, color: '#f59e0b',
+            exam_date: examDate || null, code: courseCode || null,
         })
         if (error) alert('Error: ' + error.message)
         resetCourseForm()
@@ -146,9 +213,7 @@ export default function Dashboard() {
         if (!editCourse || !courseName.trim()) return
         setSaving(true)
         const { error } = await supabase.from('courses').update({
-            name: courseName,
-            code: courseCode || null,
-            exam_date: examDate || null,
+            name: courseName, code: courseCode || null, exam_date: examDate || null,
         }).eq('id', editCourse.id)
         if (error) alert('Error: ' + error.message)
         resetCourseForm()
@@ -171,16 +236,13 @@ export default function Dashboard() {
         setEditCourse(course)
     }
 
-    const resetCourseForm = () => {
-        setCourseName(''); setCourseCode(''); setExamDate('')
-    }
+    const resetCourseForm = () => { setCourseName(''); setCourseCode(''); setExamDate('') }
 
     const addTask = async () => {
         if (!taskTitle.trim()) return
         setSaving(true)
         const { error } = await supabase.from('tasks').insert({
-            user_id: user.id, title: taskTitle,
-            due_date: taskDue || null, completed: false
+            user_id: user.id, title: taskTitle, due_date: taskDue || null, completed: false
         })
         if (error) alert('Error: ' + error.message)
         setTaskTitle(''); setTaskDue('')
@@ -195,12 +257,8 @@ export default function Dashboard() {
 
     const checkAchievements = async (userId: string) => {
         const [
-            { data: sessions },
-            { data: materials },
-            { data: panicPlans },
-            { data: gradeEntries },
-            { data: quizAttempts },
-            { data: existing },
+            { data: sessions }, { data: materials }, { data: panicPlans },
+            { data: gradeEntries }, { data: quizAttempts }, { data: existing },
         ] = await Promise.all([
             supabase.from('focus_sessions').select('*').eq('user_id', userId),
             supabase.from('study_materials').select('id').eq('user_id', userId),
@@ -211,7 +269,6 @@ export default function Dashboard() {
         ])
 
         const existingKeys = (existing || []).map((a: any) => a.achievement_key)
-
         const totalSessions = sessions?.length || 0
         const totalHours = (sessions || []).reduce((acc: number, s: any) => acc + (s.duration_mins || 0), 0) / 60
         const materialCount = materials?.length || 0
@@ -236,36 +293,21 @@ export default function Dashboard() {
         const quiz90 = (quizAttempts || []).filter((q: any) => q.total > 0 && q.score / q.total >= 0.9).length
         const quiz100 = (quizAttempts || []).filter((q: any) => q.total > 0 && q.score === q.total).length
         const quiz80x10 = (quizAttempts || []).filter((q: any) => q.total > 0 && q.score / q.total >= 0.8).length >= 10
-
         const sevenDaysAgo = new Date(); sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
         const sessionsIn7Days = (sessions || []).filter((s: any) => new Date(s.created_at) >= sevenDaysAgo).length
         const nightOwl = (sessions || []).filter((s: any) => { const h = new Date(s.created_at).getHours(); return h >= 0 && h < 4 }).length
         const earlyBird = (sessions || []).filter((s: any) => new Date(s.created_at).getHours() < 6).length
 
         const checks: Record<string, boolean> = {
-            deep_diver: totalSessions >= 5,
-            locked_in: totalSessions >= 10,
-            monk_mode: totalSessions >= 30,
-            week_warrior: maxStreak >= 3,
-            unstoppable: maxStreak >= 7,
-            academic_machine: maxStreak >= 14,
-            sharpshooter: quiz90 >= 1,
-            perfect_run: quiz100 >= 1,
-            exam_slayer: quiz80x10,
-            rising_star: cgpa > 3.0,
-            honor_roll: cgpa > 4.0,
-            deans_list: cgpa > 4.5,
-            ten_hours: totalHours >= 10,
-            twenty_five_hours: totalHours >= 25,
-            fifty_hours: totalHours >= 50,
-            hundred_hours: totalHours >= 100,
-            archivist: materialCount >= 15,
-            knowledge_vault: materialCount >= 25,
-            crisis_manager: panicCount >= 5,
-            against_all_odds: panicUnder72h,
-            night_owl: nightOwl >= 10,
-            early_bird: earlyBird >= 1,
-            survived_finals: sessionsIn7Days >= 15,
+            deep_diver: totalSessions >= 5, locked_in: totalSessions >= 10, monk_mode: totalSessions >= 30,
+            week_warrior: maxStreak >= 3, unstoppable: maxStreak >= 7, academic_machine: maxStreak >= 14,
+            sharpshooter: quiz90 >= 1, perfect_run: quiz100 >= 1, exam_slayer: quiz80x10,
+            rising_star: cgpa > 3.0, honor_roll: cgpa > 4.0, deans_list: cgpa > 4.5,
+            ten_hours: totalHours >= 10, twenty_five_hours: totalHours >= 25,
+            fifty_hours: totalHours >= 50, hundred_hours: totalHours >= 100,
+            archivist: materialCount >= 15, knowledge_vault: materialCount >= 25,
+            crisis_manager: panicCount >= 5, against_all_odds: panicUnder72h,
+            night_owl: nightOwl >= 10, early_bird: earlyBird >= 1, survived_finals: sessionsIn7Days >= 15,
         }
 
         const META: Record<string, { title: string; description: string; icon: string; rarity: string }> = {
@@ -338,6 +380,7 @@ export default function Dashboard() {
                     </p>
                 </div>
 
+                {/* Stat Cards */}
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
                     {[
                         { label: 'Study Streak', value: `${focusStats.streak} day${focusStats.streak !== 1 ? 's' : ''}`, icon: '🔥' },
@@ -352,6 +395,41 @@ export default function Dashboard() {
                         </div>
                     ))}
                 </div>
+
+                {/* Study Persona Card */}
+                {persona && (
+                    <div style={{
+                        background: '#111110',
+                        border: `1px solid ${persona.color}30`,
+                        borderRadius: '16px',
+                        padding: '1.5rem',
+                        marginBottom: '2.5rem',
+                        position: 'relative',
+                        overflow: 'hidden',
+                    }}>
+                        {/* Top glow strip */}
+                        <div style={{
+                            position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
+                            background: `linear-gradient(90deg, transparent, ${persona.color}, transparent)`
+                        }} />
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <div style={{
+                                width: '56px', height: '56px', borderRadius: '14px', flexShrink: 0,
+                                background: `${persona.color}15`, border: `1px solid ${persona.color}30`,
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem'
+                            }}>
+                                {persona.icon}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
+                                    <p style={{ fontSize: '0.65rem', color: '#5a5a4a', fontFamily: 'monospace', letterSpacing: '0.1em', textTransform: 'uppercase' }}>Your Study Persona</p>
+                                </div>
+                                <p style={{ fontSize: '1.1rem', fontWeight: 800, color: persona.color, marginBottom: '0.25rem' }}>{persona.title}</p>
+                                <p style={{ fontSize: '0.8rem', color: '#8a8a7a', lineHeight: 1.5 }}>{persona.description}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: '1rem', marginBottom: '2.5rem' }}>
 
@@ -374,19 +452,13 @@ export default function Dashboard() {
                                 {courses.map((s) => (
                                     <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.65rem 0.75rem', borderRadius: '8px', border: '1px solid #1a1a14' }}>
                                         <div style={{ background: '#1f1f18', borderRadius: '5px', padding: '0.2rem 0.5rem', flexShrink: 0 }}>
-                                            <span style={{ fontSize: '0.65rem', fontFamily: 'monospace', fontWeight: 700, color: '#f59e0b', letterSpacing: '0.05em' }}>
-                                                {s.code || '—'}
-                                            </span>
+                                            <span style={{ fontSize: '0.65rem', fontFamily: 'monospace', fontWeight: 700, color: '#f59e0b', letterSpacing: '0.05em' }}>{s.code || '—'}</span>
                                         </div>
                                         <span style={{ fontSize: '0.85rem', fontWeight: 500, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.name}</span>
                                         {s.exam_date && <span style={{ fontSize: '0.7rem', color: '#5a5a4a', flexShrink: 0 }}>{new Date(s.exam_date).toLocaleDateString()}</span>}
                                         <div style={{ display: 'flex', gap: '0.3rem', flexShrink: 0 }}>
-                                            <button onClick={() => openEditCourse(s)} style={{ padding: '0.25rem 0.5rem', borderRadius: '5px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                                Edit
-                                            </button>
-                                            <button onClick={() => setDeleteCourseId(s.id)} style={{ padding: '0.25rem 0.5rem', borderRadius: '5px', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                                Del
-                                            </button>
+                                            <button onClick={() => openEditCourse(s)} style={{ padding: '0.25rem 0.5rem', borderRadius: '5px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Edit</button>
+                                            <button onClick={() => setDeleteCourseId(s.id)} style={{ padding: '0.25rem 0.5rem', borderRadius: '5px', border: '1px solid rgba(239,68,68,0.2)', background: 'transparent', color: '#f87171', fontSize: '0.65rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Del</button>
                                         </div>
                                     </div>
                                 ))}
@@ -416,9 +488,7 @@ export default function Dashboard() {
                                         <div style={{ width: '16px', height: '16px', borderRadius: '4px', border: `1.5px solid ${t.completed ? '#f59e0b' : '#3a3a30'}`, background: t.completed ? '#f59e0b' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                                             {t.completed && <span style={{ color: '#0d0d0a', fontSize: '0.6rem', fontWeight: 900 }}>✓</span>}
                                         </div>
-                                        <span style={{ fontSize: '0.85rem', flex: 1, textDecoration: t.completed ? 'line-through' : 'none', color: t.completed ? '#5a5a4a' : '#f5f5f0' }}>
-                                            {t.title}
-                                        </span>
+                                        <span style={{ fontSize: '0.85rem', flex: 1, textDecoration: t.completed ? 'line-through' : 'none', color: t.completed ? '#5a5a4a' : '#f5f5f0' }}>{t.title}</span>
                                     </div>
                                 ))}
                             </div>
@@ -435,6 +505,7 @@ export default function Dashboard() {
                         { label: 'Library', icon: '📖', href: '/library', desc: 'Your saved study materials' },
                         { label: 'Grade Entries', icon: '🎓', href: '/grade-entries', desc: 'Track grades & CGPA' },
                         { label: 'Statistics', icon: '📊', href: '/statistics', desc: 'View your study performance' },
+                        { label: 'Leaderboard', icon: '🏆', href: '/leaderboard', desc: 'See who\'s grinding hardest' },
                     ].map((link) => (
                         <a key={link.label} href={link.href}
                             style={{ background: '#111110', border: '1px solid #1f1f18', borderRadius: '12px', padding: '1.25rem', textDecoration: 'none', color: 'inherit', display: 'block' }}
@@ -467,9 +538,7 @@ export default function Dashboard() {
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                                 <button onClick={() => { resetCourseForm(); setShowCourseModal(false) }}
-                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    Cancel
-                                </button>
+                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                                 <button onClick={addCourse} disabled={saving}
                                     style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                                     {saving ? 'Saving...' : 'Add Course'}
@@ -497,9 +566,7 @@ export default function Dashboard() {
                             </div>
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                                 <button onClick={() => { resetCourseForm(); setEditCourse(null) }}
-                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    Cancel
-                                </button>
+                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                                 <button onClick={saveEditCourse} disabled={saving}
                                     style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                                     {saving ? 'Saving...' : 'Save Changes'}
@@ -515,14 +582,10 @@ export default function Dashboard() {
                 <div style={{ position: 'fixed', inset: 0, zIndex: 50, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem', background: 'rgba(0,0,0,0.75)' }}>
                     <div style={{ width: '100%', maxWidth: '380px', background: '#111110', border: '1px solid #2a2a22', borderRadius: '16px', padding: '2rem' }}>
                         <p style={{ fontSize: '1rem', fontWeight: 700, marginBottom: '0.5rem' }}>Delete course?</p>
-                        <p style={{ fontSize: '0.85rem', color: '#5a5a4a', marginBottom: '1.5rem', lineHeight: 1.6 }}>
-                            This will permanently remove this course. This cannot be undone.
-                        </p>
+                        <p style={{ fontSize: '0.85rem', color: '#5a5a4a', marginBottom: '1.5rem', lineHeight: 1.6 }}>This will permanently remove this course. This cannot be undone.</p>
                         <div style={{ display: 'flex', gap: '0.75rem' }}>
                             <button onClick={() => setDeleteCourseId(null)}
-                                style={{ flex: 1, padding: '0.75rem', borderRadius: '9px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                Cancel
-                            </button>
+                                style={{ flex: 1, padding: '0.75rem', borderRadius: '9px', border: '1px solid #2a2a22', background: 'transparent', color: '#8a8a7a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                             <button onClick={confirmDeleteCourse} disabled={deleting}
                                 style={{ flex: 1, padding: '0.75rem', borderRadius: '9px', border: 'none', background: '#ef4444', color: '#fff', fontSize: '0.875rem', fontWeight: 700, cursor: deleting ? 'not-allowed' : 'pointer', fontFamily: 'inherit' }}>
                                 {deleting ? 'Deleting...' : 'Delete'}
@@ -544,9 +607,7 @@ export default function Dashboard() {
                                 style={{ background: '#0d0d0a', border: '1px solid #1f1f18', borderRadius: '8px', padding: '0.75rem 1rem', color: '#f5f5f0', fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit', colorScheme: 'dark' }} />
                             <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem' }}>
                                 <button onClick={() => setShowTaskModal(false)}
-                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                    Cancel
-                                </button>
+                                    style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: '1px solid #1f1f18', background: 'none', color: '#5a5a4a', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
                                 <button onClick={addTask} disabled={saving}
                                     style={{ flex: 1, padding: '0.75rem', borderRadius: '8px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                                     {saving ? 'Saving...' : 'Add Task'}
