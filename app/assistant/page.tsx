@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
 type MCQ = {
@@ -57,13 +57,22 @@ export default function Assistant() {
   const [mcqDifficulty, setMcqDifficulty] = useState('medium')
   const [user, setUser] = useState<any>(null)
   const [quizSaved, setQuizSaved] = useState(false)
-  const [generatedOnce, setGeneratedOnce] = useState(false)
+
+  // useRef so tab never resets between generations
+  const generatedOnce = useRef(false)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUser(user)
     })
   }, [])
+
+  // Auto-save quiz when it completes — no need to click Retry
+  useEffect(() => {
+    if (mcqs.length > 0 && currentQ >= mcqs.length && user && !quizSaved) {
+      saveQuizAttempt(score, mcqs.length)
+    }
+  }, [currentQ, mcqs.length])
 
   const saveMaterial = async (summaryText: string, flashcardsData: any[], mcqsData: any[], examQsData: any[], filename: string) => {
     if (!user) return
@@ -151,10 +160,11 @@ export default function Assistant() {
         file.name
       )
 
-      if (!generatedOnce) {
+      if (!generatedOnce.current) {
         setActiveTab('summary')
-        setGeneratedOnce(true)
+        generatedOnce.current = true
       }
+
       setStep('')
     } catch (err: any) {
       setError(err.message)
@@ -173,10 +183,6 @@ export default function Assistant() {
   const nextQuestion = () => {
     setSelected(null)
     setCurrentQ(q => q + 1)
-  }
-
-  const handleQuizComplete = async (finalScore: number) => {
-    await saveQuizAttempt(finalScore, mcqs.length)
   }
 
   const tabs = ['summary', 'flashcards', 'mcqs', 'examquestions']
@@ -464,9 +470,8 @@ export default function Assistant() {
                   <p style={{ fontSize: '0.85rem', color: '#5a5a4a', marginBottom: '2rem' }}>
                     {score === mcqs.length ? 'Perfect score! 🏆' : score >= mcqs.length * 0.7 ? 'Great job! Keep it up 💪' : 'Keep studying — you got this! 📚'}
                   </p>
-                  <button onClick={async () => {
-                    await handleQuizComplete(score)
-                    setCurrentQ(0); setSelected(null); setScore(0)
+                  <button onClick={() => {
+                    setCurrentQ(0); setSelected(null); setScore(0); setQuizSaved(false)
                   }} style={{ padding: '0.85rem 2rem', borderRadius: '10px', border: 'none', background: '#f59e0b', color: '#0d0d0a', fontSize: '0.9rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
                     Retry Quiz →
                   </button>
