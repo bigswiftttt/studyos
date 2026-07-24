@@ -1,68 +1,31 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Groq from 'groq-sdk'
+import { z } from 'zod'
+import { requireUser } from '@/app/lib/requireUser'
+import { checkRateLimit } from '@/app/lib/rateLimit'
+import { extractText, FileTooLargeError } from '@/app/lib/extractText'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
-async function extractText(file: File): Promise<string> {
-  const arrayBuffer = await file.arrayBuffer()
-  const buffer = Buffer.from(arrayBuffer)
-  const mime = file.type
-  const name = file.name.toLowerCase()
-
-  // PDF
-  if (mime === 'application/pdf' || name.endsWith('.pdf')) {
-    const pdf = (await import('pdf-parse')).default
-    const data = await pdf(buffer)
-    return data.text
-  }
-
-  // DOCX
-  if (mime === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' || name.endsWith('.docx')) {
-    const mammoth = (await import('mammoth')).default
-    const result = await mammoth.extractRawText({ buffer })
-    return result.value
-  }
-
-  // PPTX / DOC / ODT and other office formats
-  if (name.endsWith('.pptx') || name.endsWith('.doc') || name.endsWith('.odt') || name.endsWith('.odp')) {
-    const officeParser = (await import('officeparser')).default
-    const text = await new Promise<string>((resolve, reject) => {
-      officeParser.parseOffice(buffer, (data: any, err: any) => {
-        if (err) reject(err)
-        else resolve(data.toString())
-      }, { outputErrorToConsole: false })
-    })
-    return text
-  }
-
-  // Plain text
-  if (mime === 'text/plain' || name.endsWith('.txt')) {
-    return buffer.toString('utf-8')
-  }
-
-  // Image — send to Groq vision
-  if (mime.startsWith('image/')) {
-    const base64 = buffer.toString('base64')
-    const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 2048,
-      messages: [
-        {
-          role: 'user',
-          content: [
-            { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
-            { type: 'text', text: 'Extract and return all the text content from this image as plain text.' }
-          ] as any
-        }
-      ]
-    })
-    return completion.choices[0]?.message?.content || ''
-  }
-
-  throw new Error(`Unsupported file type: ${mime || name}`)
-}
+const FlashcardsSchema = z.array(z.object({
+  front: z.string(),
+  back: z.string(),
+}))
 
 export async function POST(req: NextRequest) {
+  const user = await requireUser(req)
+  if (!user) {
+    return NextResponse.json({ error: 'Unauthorized. Please sign in and try again.' }, { status: 401 })
+  }
+
+  const { success, retryAfterMinutes } = await checkRateLimit(user.id, 'generate', 20, 60)
+  if (!success) {
+    return NextResponse.json(
+      { error: `You're generating too quickly. Try again in about ${retryAfterMinutes} minute(s).` },
+      { status: 429 }
+    )
+  }
+
   try {
     const formData = await req.formData()
     const file = formData.get('pdf') as File
@@ -103,11 +66,28 @@ ${text.slice(0, 6000)}`
 
     const content = completion.choices[0]?.message?.content || '[]'
     const cleaned = content.replace(/```json|```/g, '').trim()
-    const flashcards = JSON.parse(cleaned)
+
+    let flashcards
+    try {
+      flashcards = FlashcardsSchema.parse(JSON.parse(cleaned))
+    } catch (parseErr) {
+      console.error('[api/flashcards] malformed AI response:', cleaned)
+      return NextResponse.json(
+        { error: 'The AI returned an unexpected format. Please try generating again.' },
+        { status: 502 }
+      )
+    }
 
     return NextResponse.json({ flashcards })
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error instanceof FileTooLargeError) {
+      return NextResponse.json({ error: error.message }, { status: 413 })
+    }
+    console.error('[api/flashcards]', error)
+    return NextResponse.json(
+      { error: 'Something went wrong generating your flashcards. Please try again.' },
+      { status: 500 }
+    )
   }
 }

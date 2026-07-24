@@ -1,11 +1,49 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Groq from 'groq-sdk'
+import { z } from 'zod'
+import { requireUser } from '@/app/lib/requireUser'
+import { checkRateLimit } from '@/app/lib/rateLimit'
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY })
 
+const PanicPlanSchema = z.object({
+    survivalAnalysis: z.string(),
+    riskLevel: z.enum(['Low Risk', 'Moderate Risk', 'High Risk', 'Academic Near-Death Experience']),
+    priorityTopics: z.array(z.object({
+        topic: z.string(),
+        priority: z.enum(['high', 'medium', 'quick']),
+    })),
+    dailyPlan: z.array(z.object({
+        day: z.number(),
+        tasks: z.array(z.string()),
+    })),
+    focusSessions: z.string(),
+    motivationTip: z.string(),
+})
+
 export async function POST(req: NextRequest) {
+    const user = await requireUser(req)
+    if (!user) {
+        return NextResponse.json({ error: 'Unauthorized. Please sign in and try again.' }, { status: 401 })
+    }
+
+    const { success, retryAfterMinutes } = await checkRateLimit(user.id, 'generate', 20, 60)
+    if (!success) {
+        return NextResponse.json(
+            { error: `You're generating too quickly. Try again in about ${retryAfterMinutes} minute(s).` },
+            { status: 429 }
+        )
+    }
+
     try {
-        const { examName, daysLeft, topicList, confidence, hoursPerDay, intensity } = await req.json()
+        const { examName, daysLeft: rawDaysLeft, topicList, confidence, hoursPerDay, intensity } = await req.json()
+
+        if (!Array.isArray(topicList) || topicList.length === 0) {
+            return NextResponse.json({ error: 'Please provide at least one topic.' }, { status: 400 })
+        }
+
+        // Clamp so the "max 14 days" instruction below is actually true, not just requested.
+        const daysLeft = Math.max(0, Math.min(Number(rawDaysLeft) || 0, 14))
 
         const prompt = `You are an expert academic emergency planner. A student has a crisis exam situation. Generate a detailed survival plan.
 
@@ -55,11 +93,25 @@ Rules:
 
         const content = completion.choices[0]?.message?.content || '{}'
         const cleaned = content.replace(/```json|```/g, '').trim()
-        const parsed = JSON.parse(cleaned)
+
+        let parsed
+        try {
+            parsed = PanicPlanSchema.parse(JSON.parse(cleaned))
+        } catch (parseErr) {
+            console.error('[api/panic-plan] malformed AI response:', cleaned)
+            return NextResponse.json(
+                { error: 'The AI returned an unexpected format. Please try generating again.' },
+                { status: 502 }
+            )
+        }
 
         return NextResponse.json(parsed)
 
     } catch (error: any) {
-        return NextResponse.json({ error: error.message }, { status: 500 })
+        console.error('[api/panic-plan]', error)
+        return NextResponse.json(
+            { error: 'Something went wrong generating your plan. Please try again.' },
+            { status: 500 }
+        )
     }
 }

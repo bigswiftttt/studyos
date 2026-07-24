@@ -66,79 +66,43 @@ export default function Leaderboard() {
             since = d.toISOString()
         }
 
-        // Fetch all data in parallel
-        const [focusRes, quizRes, materialRes, profileRes] = await Promise.all([
-            since
-                ? supabase.from('focus_sessions').select('user_id, duration_mins, created_at').gte('created_at', since)
-                : supabase.from('focus_sessions').select('user_id, duration_mins, created_at'),
-            since
-                ? supabase.from('quiz_attempts').select('user_id, total, created_at').gte('created_at', since)
-                : supabase.from('quiz_attempts').select('user_id, total, created_at'),
-            since
-                ? supabase.from('study_materials').select('user_id, created_at').gte('created_at', since)
-                : supabase.from('study_materials').select('user_id, created_at'),
-            supabase.from('profiles').select('id, full_name'),
-        ])
+        // Aggregation now happens server-side via a Postgres RPC (security
+        // definer) rather than selecting the raw focus_sessions/quiz_attempts/
+        // study_materials/profiles tables directly from the browser — the
+        // previous version required RLS to allow any authenticated user to
+        // read every other user's raw activity rows, not just the aggregate.
+        // See supabase/migrations/001_production_fixes.sql (get_leaderboard).
+        const sinceTimestamp = since || '1970-01-01T00:00:00.000Z'
+        const { data: rows, error } = await supabase.rpc('get_leaderboard', { since: sinceTimestamp })
 
-        const focusSessions = focusRes.data || []
-        const quizAttempts = quizRes.data || []
-        const materials = materialRes.data || []
-        const profiles = profileRes.data || []
-
-        // Build score per user
-        const scores: Record<string, { focusMins: number; quizMins: number; materialMins: number }> = {}
-
-        const ensureUser = (uid: string) => {
-            if (!scores[uid]) scores[uid] = { focusMins: 0, quizMins: 0, materialMins: 0 }
-        }
-
-        // Focus mins — actual duration
-        focusSessions.forEach((s: any) => {
-            ensureUser(s.user_id)
-            scores[s.user_id].focusMins += s.duration_mins || 0
-        })
-
-        // Quiz mins — each question = 0.75 mins (45 seconds)
-        quizAttempts.forEach((q: any) => {
-            ensureUser(q.user_id)
-            scores[q.user_id].quizMins += (q.total || 0) * 0.75
-        })
-
-        // Material mins — each material = 5 mins
-        materials.forEach((m: any) => {
-            ensureUser(m.user_id)
-            scores[m.user_id].materialMins += 5
-        })
-
-        // Build profile map
-        const profileMap: Record<string, string> = {}
-        profiles.forEach((p: any) => { profileMap[p.id] = p.full_name || 'Anonymous' })
-
-        // Also fetch current user's metadata if not in profiles
-        const { data: { user: authUser } } = await supabase.auth.getUser()
-        if (authUser && !profileMap[authUser.id]) {
-            profileMap[authUser.id] = authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'You'
+        if (error) {
+            console.error('[leaderboard] get_leaderboard RPC failed:', error.message)
+            setEntries([])
+            setUserRank(null)
+            setLoading(false)
+            return
         }
 
         // Sort by total study mins
-        const sorted = Object.entries(scores)
-            .map(([uid, s]) => ({
-                uid,
-                name: anonymizeName(profileMap[uid] || 'Anonymous'),
-                focusMins: s.focusMins,
-                quizMins: s.quizMins,
-                materialMins: s.materialMins,
-                totalStudyMins: s.focusMins + s.quizMins + s.materialMins,
-                isCurrentUser: uid === userId,
+        const sorted = (rows || [])
+            .map((r: any) => ({
+                uid: r.user_id,
+                name: anonymizeName(r.full_name || 'Anonymous'),
+                focusMins: r.focus_mins || 0,
+                quizMins: r.quiz_mins || 0,
+                materialMins: r.material_mins || 0,
+                totalStudyMins: (r.focus_mins || 0) + (r.quiz_mins || 0) + (r.material_mins || 0),
+                isCurrentUser: r.user_id === userId,
             }))
-            .sort((a, b) => b.totalStudyMins - a.totalStudyMins)
-            .map((entry, i) => ({ ...entry, rank: i + 1 }))
+            .filter((e: any) => e.totalStudyMins > 0)
+            .sort((a: any, b: any) => b.totalStudyMins - a.totalStudyMins)
+            .map((entry: any, i: number) => ({ ...entry, rank: i + 1 }))
 
         // Top 10 for display
         const top10 = sorted.slice(0, 10)
 
         // Find current user's rank (even if outside top 10)
-        const currentUserEntry = sorted.find(e => e.isCurrentUser)
+        const currentUserEntry = sorted.find((e: any) => e.isCurrentUser)
         if (currentUserEntry && currentUserEntry.rank > 10) {
             setUserRank(currentUserEntry)
         } else {

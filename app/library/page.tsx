@@ -3,12 +3,14 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../lib/supabase'
 
+const MAX_FILE_SIZE = 15 * 1024 * 1024 // 15MB
+
 type Material = {
   id: string
-  name: string
-  size: number
-  path: string
-  url: string
+  title: string
+  file_size: number
+  file_path: string
+  file_url: string | null // signed URL, populated at fetch time — not stored long-term
   created_at: string
 }
 
@@ -32,13 +34,35 @@ export default function Materials() {
 
   const fetchMaterials = async (userId: string) => {
     setLoading(true)
+    // Library now reads from study_materials (the same table the Assistant
+    // writes to) instead of the old, disconnected `materials` table — files
+    // uploaded here and materials generated in the Assistant now show up in
+    // the same place. Only rows with a file_path are actual uploads.
     const { data, error } = await supabase
-      .from('materials')
-      .select('*')
+      .from('study_materials')
+      .select('id, title, file_size, file_path, created_at')
       .eq('user_id', userId)
+      .not('file_path', 'is', null)
       .order('created_at', { ascending: false })
-    console.log('data:', data, 'error:', error)
-    if (data) setMaterials(data)
+
+    if (error) {
+      console.error('[library] fetchMaterials failed:', error.message)
+      setLoading(false)
+      return
+    }
+
+    // The bucket is private, so generate a short-lived signed URL per file
+    // rather than storing/reusing a public URL (see migration notes —
+    // previously getPublicUrl() meant anyone with the URL could read a
+    // student's uploaded notes with no auth check at all).
+    const withUrls = await Promise.all((data || []).map(async (m: any) => {
+      const { data: signed } = await supabase.storage
+        .from('materials')
+        .createSignedUrl(m.file_path, 60 * 60) // 1 hour
+      return { ...m, file_url: signed?.signedUrl || null }
+    }))
+
+    setMaterials(withUrls)
     setLoading(false)
   }
 
@@ -46,6 +70,10 @@ export default function Materials() {
     if (!user) return
     if (file.type !== 'application/pdf') {
       setError('Only PDF files are supported.')
+      return
+    }
+    if (file.size > MAX_FILE_SIZE) {
+      setError(`File too large — max ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
       return
     }
     setUploading(true)
@@ -62,15 +90,18 @@ export default function Materials() {
       return
     }
 
-    const { data: urlData } = supabase.storage.from('materials').getPublicUrl(path)
-
-    await supabase.from('materials').insert({
+    const { error: insertError } = await supabase.from('study_materials').insert({
       user_id: user.id,
-      name: file.name,
-      size: file.size,
-      path,
-      url: urlData.publicUrl,
+      title: file.name.replace(/\.[^/.]+$/, ''),
+      file_size: file.size,
+      file_path: path,
     })
+
+    if (insertError) {
+      setError('File uploaded but failed to save. Please refresh and try again.')
+      setUploading(false)
+      return
+    }
 
     setUploading(false)
     fetchMaterials(user.id)
@@ -88,8 +119,13 @@ export default function Materials() {
     setDeleting(true)
     const material = materials.find(m => m.id === deleteId)
     if (material) {
-      await supabase.storage.from('materials').remove([material.path])
-      await supabase.from('materials').delete().eq('id', deleteId)
+      await supabase.storage.from('materials').remove([material.file_path])
+      const { error } = await supabase.from('study_materials').delete().eq('id', deleteId)
+      if (error) {
+        setError('Could not delete file. Please try again.')
+        setDeleting(false)
+        return
+      }
     }
     setDeleteId(null)
     setDeleting(false)
@@ -236,28 +272,29 @@ export default function Materials() {
                       fontSize: '0.875rem', fontWeight: 600, color: '#e0e0d0',
                       whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', maxWidth: '300px'
                     }}>
-                      {m.name}
+                      {m.title}
                     </p>
                     <p style={{ fontSize: '0.72rem', color: '#3a3a30', fontFamily: 'monospace', marginTop: '0.15rem' }}>
-                      {formatSize(m.size)} · {formatDate(m.created_at)}
+                      {formatSize(m.file_size)} · {formatDate(m.created_at)}
                     </p>
                   </div>
                 </div>
 
                 <div className="material-actions" style={{ display: 'flex', gap: '0.5rem', flexShrink: 0 }}>
                   <a
-                    href={`/assistant?url=${encodeURIComponent(m.url)}&name=${encodeURIComponent(m.name)}`}
+                    href={m.file_url ? `/assistant?url=${encodeURIComponent(m.file_url)}&name=${encodeURIComponent(m.title)}` : '#'}
                     style={{
                       padding: '0.45rem 0.85rem', borderRadius: '7px',
                       border: '1px solid #2a2a22', background: 'transparent',
-                      color: '#8a8a7a', fontSize: '0.75rem', fontWeight: 600,
-                      textDecoration: 'none', fontFamily: 'inherit'
+                      color: m.file_url ? '#8a8a7a' : '#3a3a30', fontSize: '0.75rem', fontWeight: 600,
+                      textDecoration: 'none', fontFamily: 'inherit',
+                      pointerEvents: m.file_url ? 'auto' : 'none'
                     }}
                   >
                     Open in Assistant
                   </a>
                   <a
-                    href={m.url}
+                    href={m.file_url || '#'}
                     target="_blank"
                     rel="noopener noreferrer"
                     style={{

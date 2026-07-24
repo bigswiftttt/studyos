@@ -17,6 +17,8 @@ type ExamQuestion = {
   hint: string
 }
 
+const MAX_FILE_SIZE = 15 * 1024 * 1024 // 15MB — must match app/lib/extractText.ts
+
 const ACCEPTED_TYPES = [
   'application/pdf',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -61,6 +63,12 @@ export default function Assistant() {
   // useRef so tab never resets between generations
   const generatedOnce = useRef(false)
 
+  const authHeaders = async (): Promise<Record<string, string>> => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session?.access_token) return {}
+    return { Authorization: `Bearer ${session.access_token}` }
+  }
+
   useEffect(() => {
     supabase.auth.getUser().then(({ data: { user } }) => {
       if (user) setUser(user)
@@ -96,12 +104,24 @@ export default function Assistant() {
     })
   }
 
+  const validateAndSetFile = (f: File) => {
+    if (!ACCEPTED_TYPES.includes(f.type)) {
+      setError('Unsupported file type.')
+      return
+    }
+    if (f.size > MAX_FILE_SIZE) {
+      setError(`File too large — max ${MAX_FILE_SIZE / 1024 / 1024}MB.`)
+      return
+    }
+    setFile(f)
+    setError('')
+  }
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragging(false)
     const dropped = e.dataTransfer.files[0]
-    if (dropped && ACCEPTED_TYPES.includes(dropped.type)) setFile(dropped)
-    else setError('Unsupported file type.')
+    if (dropped) validateAndSetFile(dropped)
   }
 
   const generate = async () => {
@@ -119,44 +139,67 @@ export default function Assistant() {
     setScore(0)
     setQuizSaved(false)
 
-    try {
-      setStep('📄 Extracting content...')
-      const formData1 = new FormData()
-      formData1.append('pdf', file)
-      const summaryRes = await fetch('/api/summarize', { method: 'POST', body: formData1 })
-      const summaryData = await summaryRes.json()
-      if (summaryData.error) throw new Error(summaryData.error)
-      setSummary(summaryData.summary)
+    const headers = await authHeaders()
+    setStep('🧠 Generating your study materials...')
 
-      setStep('🃏 Generating flashcards...')
-      const formData2 = new FormData()
-      formData2.append('pdf', file)
-      const flashRes = await fetch('/api/flashcards', { method: 'POST', body: formData2 })
-      const flashData = await flashRes.json()
-      if (!flashData.error) setFlashcards(flashData.flashcards)
+    // Build one FormData per endpoint (a FormData can't be reused across
+    // fetches once consumed) and fire all four in parallel — they're
+    // independent, so there's no reason to make the user wait for them
+    // sequentially.
+    const buildFormData = () => {
+      const fd = new FormData()
+      fd.append('pdf', file)
+      return fd
+    }
+    const mcqFormData = buildFormData()
+    mcqFormData.append('count', mcqCount.toString())
+    mcqFormData.append('difficulty', mcqDifficulty)
 
-      setStep('❓ Generating MCQ quiz...')
-      const formData3 = new FormData()
-      formData3.append('pdf', file)
-      formData3.append('count', mcqCount.toString())
-      formData3.append('difficulty', mcqDifficulty)
-      const mcqRes = await fetch('/api/mcqs', { method: 'POST', body: formData3 })
-      const mcqData = await mcqRes.json()
-      if (!mcqData.error) setMcqs(mcqData.mcqs)
+    const [summaryOutcome, flashOutcome, mcqOutcome, examOutcome] = await Promise.allSettled([
+      fetch('/api/summarize', { method: 'POST', headers, body: buildFormData() }).then(r => r.json()),
+      fetch('/api/flashcards', { method: 'POST', headers, body: buildFormData() }).then(r => r.json()),
+      fetch('/api/mcqs', { method: 'POST', headers, body: mcqFormData }).then(r => r.json()),
+      fetch('/api/exam-questions', { method: 'POST', headers, body: buildFormData() }).then(r => r.json()),
+    ])
 
-      setStep('🎯 Generating exam questions...')
-      const formData4 = new FormData()
-      formData4.append('pdf', file)
-      const examRes = await fetch('/api/exam-questions', { method: 'POST', body: formData4 })
-      const examData = await examRes.json()
-      if (!examData.error) setExamQuestions(examData.questions)
+    // Each artifact is applied independently — a failure in one (e.g. the AI
+    // returned malformed JSON for MCQs) no longer wipes out the others that
+    // succeeded. We collect which steps failed to show one clear summary.
+    const failedSteps: string[] = []
 
+    const summaryData = summaryOutcome.status === 'fulfilled' ? summaryOutcome.value : null
+    if (summaryData && !summaryData.error) setSummary(summaryData.summary)
+    else failedSteps.push('summary')
+
+    const flashData = flashOutcome.status === 'fulfilled' ? flashOutcome.value : null
+    if (flashData && !flashData.error) setFlashcards(flashData.flashcards)
+    else failedSteps.push('flashcards')
+
+    const mcqData = mcqOutcome.status === 'fulfilled' ? mcqOutcome.value : null
+    if (mcqData && !mcqData.error) setMcqs(mcqData.mcqs)
+    else failedSteps.push('MCQs')
+
+    const examData = examOutcome.status === 'fulfilled' ? examOutcome.value : null
+    if (examData && !examData.error) setExamQuestions(examData.questions)
+    else failedSteps.push('exam questions')
+
+    if (failedSteps.length === 4) {
+      // Everything failed — surface the most informative error we have (e.g.
+      // "Unauthorized", "Rate limit exceeded", "File too large") rather than
+      // a generic message, since it's likely the same root cause for all four.
+      const firstError = [summaryData, flashData, mcqData, examData].find(d => d?.error)?.error
+      setError(firstError || 'Something went wrong. Please try again.')
+    } else if (failedSteps.length > 0) {
+      setError(`Generated ${4 - failedSteps.length}/4 successfully. Couldn't generate: ${failedSteps.join(', ')}. You can try again — the parts that worked are still shown below.`)
+    }
+
+    if (failedSteps.length < 4) {
       setStep('💾 Saving to your library...')
       await saveMaterial(
-        summaryData.summary,
-        flashData.flashcards || [],
-        mcqData.mcqs || [],
-        examData.questions || [],
+        summaryData?.summary || '',
+        flashData?.flashcards || [],
+        mcqData?.mcqs || [],
+        examData?.questions || [],
         file.name
       )
 
@@ -164,13 +207,9 @@ export default function Assistant() {
         setActiveTab('summary')
         generatedOnce.current = true
       }
-
-      setStep('')
-    } catch (err: any) {
-      setError(err.message)
-      setStep('')
     }
 
+    setStep('')
     setLoading(false)
   }
 
@@ -249,8 +288,7 @@ export default function Assistant() {
             style={{ display: 'none' }}
             onChange={(e) => {
               const f = e.target.files?.[0]
-              if (f && ACCEPTED_TYPES.includes(f.type)) { setFile(f); setError('') }
-              else if (f) setError('Unsupported file type.')
+              if (f) validateAndSetFile(f)
             }} />
           <div style={{ fontSize: '2rem', marginBottom: '0.75rem' }}>📄</div>
           {file ? (

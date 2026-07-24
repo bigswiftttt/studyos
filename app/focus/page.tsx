@@ -96,10 +96,15 @@ export default function FocusMode() {
     }).select()
     if (data) fetchTodaySessions(user.id)
 
-    // Update total hours in profile
-    await supabase.from('profiles')
-      .update({ total_hours: (MODES[mode].duration / 60 / 60) })
-      .eq('id', user.id)
+    // Add this session's hours to the running total (was previously
+    // overwriting total_hours with just this session's length — see
+    // supabase/migrations/001_production_fixes.sql for the RPC + one-time
+    // backfill that corrects existing profiles).
+    const { error: hoursError } = await supabase.rpc('increment_total_hours', {
+      uid: user.id,
+      hrs: MODES[mode].duration / 3600,
+    })
+    if (hoursError) console.error('[focus] increment_total_hours failed:', hoursError.message)
   }
 
   const playDing = () => {
@@ -115,6 +120,7 @@ export default function FocusMode() {
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1)
       osc.start(ctx.currentTime)
       osc.stop(ctx.currentTime + 1)
+      osc.onended = () => ctx.close()
     } catch (e) { }
   }
 
