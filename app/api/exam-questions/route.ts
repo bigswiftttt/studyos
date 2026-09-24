@@ -43,16 +43,16 @@ export async function POST(req: NextRequest) {
         }
 
         const completion = await groq.chat.completions.create({
-            model: 'qwen-qwq-32b',
+            model: 'model: 'llama- 3.1 - 8b - instant'',
             max_tokens: 2048,
             messages: [
-                {
-                    role: 'system',
-                    content: 'You are an expert university professor. Return ONLY valid JSON, no markdown, no explanation.'
-                },
-                {
-                    role: 'user',
-                    content: `Generate 5 likely exam questions from these lecture notes. These should be the kind of questions that would appear in a university exam.
+            {
+                role: 'system',
+                content: 'You are an expert university professor. Return ONLY valid JSON, no markdown, no explanation.'
+            },
+            {
+                role: 'user',
+                content: `Generate 5 likely exam questions from these lecture notes. These should be the kind of questions that would appear in a university exam.
 
 Return ONLY a JSON array like this:
 [
@@ -68,34 +68,34 @@ Types can be: "essay", "short answer", or "calculation"
 
 Notes:
 ${text.slice(0, 6000)}`
-                }
-            ]
+            }
+        ]
         })
 
-        const content = completion.choices[0]?.message?.content || '[]'
-        const cleaned = content.replace(/```json|```/g, '').trim()
+    const content = completion.choices[0]?.message?.content || '[]'
+    const cleaned = content.replace(/```json|```/g, '').trim()
 
-        let questions
-        try {
-            questions = ExamQuestionsSchema.parse(JSON.parse(cleaned))
-        } catch (parseErr) {
-            console.error('[api/exam-questions] malformed AI response:', cleaned)
-            return NextResponse.json(
-                { error: 'The AI returned an unexpected format. Please try generating again.' },
-                { status: 502 }
-            )
-        }
-
-        return NextResponse.json({ questions })
-
-    } catch (error: any) {
-        if (error instanceof FileTooLargeError) {
-            return NextResponse.json({ error: error.message }, { status: 413 })
-        }
-        console.error('[api/exam-questions]', error)
+    let questions
+    try {
+        questions = ExamQuestionsSchema.parse(JSON.parse(cleaned))
+    } catch (parseErr) {
+        console.error('[api/exam-questions] malformed AI response:', cleaned)
         return NextResponse.json(
-            { error: 'Something went wrong generating exam questions. Please try again.' },
-            { status: 500 }
+            { error: 'The AI returned an unexpected format. Please try generating again.' },
+            { status: 502 }
         )
     }
+
+    return NextResponse.json({ questions })
+
+} catch (error: any) {
+    if (error instanceof FileTooLargeError) {
+        return NextResponse.json({ error: error.message }, { status: 413 })
+    }
+    console.error('[api/exam-questions]', error)
+    return NextResponse.json(
+        { error: 'Something went wrong generating exam questions. Please try again.' },
+        { status: 500 }
+    )
+}
 }

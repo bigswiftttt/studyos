@@ -77,41 +77,41 @@ Rules:
 - motivationTip must be specific and actionable, not generic`
 
         const completion = await groq.chat.completions.create({
-            model: 'qwen-qwq-32b',
+            model: 'model: 'llama- 3.1 - 8b - instant'',
             max_tokens: 2048,
             messages: [
-                {
-                    role: 'system',
-                    content: 'You are an academic emergency planner. Return ONLY valid JSON, no markdown, no explanation.'
-                },
-                {
-                    role: 'user',
-                    content: prompt
-                }
-            ]
+            {
+                role: 'system',
+                content: 'You are an academic emergency planner. Return ONLY valid JSON, no markdown, no explanation.'
+            },
+            {
+                role: 'user',
+                content: prompt
+            }
+        ]
         })
 
-        const content = completion.choices[0]?.message?.content || '{}'
-        const cleaned = content.replace(/```json|```/g, '').trim()
+    const content = completion.choices[0]?.message?.content || '{}'
+    const cleaned = content.replace(/```json|```/g, '').trim()
 
-        let parsed
-        try {
-            parsed = PanicPlanSchema.parse(JSON.parse(cleaned))
-        } catch (parseErr) {
-            console.error('[api/panic-plan] malformed AI response:', cleaned)
-            return NextResponse.json(
-                { error: 'The AI returned an unexpected format. Please try generating again.' },
-                { status: 502 }
-            )
-        }
-
-        return NextResponse.json(parsed)
-
-    } catch (error: any) {
-        console.error('[api/panic-plan]', error)
+    let parsed
+    try {
+        parsed = PanicPlanSchema.parse(JSON.parse(cleaned))
+    } catch (parseErr) {
+        console.error('[api/panic-plan] malformed AI response:', cleaned)
         return NextResponse.json(
-            { error: 'Something went wrong generating your plan. Please try again.' },
-            { status: 500 }
+            { error: 'The AI returned an unexpected format. Please try generating again.' },
+            { status: 502 }
         )
     }
+
+    return NextResponse.json(parsed)
+
+} catch (error: any) {
+    console.error('[api/panic-plan]', error)
+    return NextResponse.json(
+        { error: 'Something went wrong generating your plan. Please try again.' },
+        { status: 500 }
+    )
+}
 }

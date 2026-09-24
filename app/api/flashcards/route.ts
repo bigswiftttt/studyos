@@ -41,16 +41,16 @@ export async function POST(req: NextRequest) {
     }
 
     const completion = await groq.chat.completions.create({
-      model: 'qwen-qwq-32b',
+      model: 'model: 'llama- 3.1 - 8b - instant'',
       max_tokens: 2048,
       messages: [
-        {
-          role: 'system',
-          content: 'You are a study assistant. Return ONLY valid JSON, no markdown, no explanation.'
-        },
-        {
-          role: 'user',
-          content: `Generate 12 flashcards from these lecture notes.
+      {
+        role: 'system',
+        content: 'You are a study assistant. Return ONLY valid JSON, no markdown, no explanation.'
+      },
+      {
+        role: 'user',
+        content: `Generate 12 flashcards from these lecture notes.
 
 Return ONLY a JSON array like this:
 [
@@ -60,34 +60,34 @@ Return ONLY a JSON array like this:
 
 Notes:
 ${text.slice(0, 6000)}`
-        }
-      ]
+      }
+    ]
     })
 
-    const content = completion.choices[0]?.message?.content || '[]'
-    const cleaned = content.replace(/```json|```/g, '').trim()
+  const content = completion.choices[0]?.message?.content || '[]'
+  const cleaned = content.replace(/```json|```/g, '').trim()
 
-    let flashcards
-    try {
-      flashcards = FlashcardsSchema.parse(JSON.parse(cleaned))
-    } catch (parseErr) {
-      console.error('[api/flashcards] malformed AI response:', cleaned)
-      return NextResponse.json(
-        { error: 'The AI returned an unexpected format. Please try generating again.' },
-        { status: 502 }
-      )
-    }
-
-    return NextResponse.json({ flashcards })
-
-  } catch (error: any) {
-    if (error instanceof FileTooLargeError) {
-      return NextResponse.json({ error: error.message }, { status: 413 })
-    }
-    console.error('[api/flashcards]', error)
+  let flashcards
+  try {
+    flashcards = FlashcardsSchema.parse(JSON.parse(cleaned))
+  } catch (parseErr) {
+    console.error('[api/flashcards] malformed AI response:', cleaned)
     return NextResponse.json(
-      { error: 'Something went wrong generating your flashcards. Please try again.' },
-      { status: 500 }
+      { error: 'The AI returned an unexpected format. Please try generating again.' },
+      { status: 502 }
     )
   }
+
+  return NextResponse.json({ flashcards })
+
+} catch (error: any) {
+  if (error instanceof FileTooLargeError) {
+    return NextResponse.json({ error: error.message }, { status: 413 })
+  }
+  console.error('[api/flashcards]', error)
+  return NextResponse.json(
+    { error: 'Something went wrong generating your flashcards. Please try again.' },
+    { status: 500 }
+  )
+}
 }
