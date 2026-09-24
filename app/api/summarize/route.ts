@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
         : 'Create a focused summary covering all key points.'
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: 'qwen-qwq-32b',
       max_tokens: maxTokens,
       messages: [
         {

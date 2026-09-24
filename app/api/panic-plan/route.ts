@@ -77,7 +77,7 @@ Rules:
 - motivationTip must be specific and actionable, not generic`
 
         const completion = await groq.chat.completions.create({
-            model: 'llama-3.3-70b-versatile',
+            model: 'qwen-qwq-32b',
             max_tokens: 2048,
             messages: [
                 {

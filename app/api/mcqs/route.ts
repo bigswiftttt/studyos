@@ -55,7 +55,7 @@ export async function POST(req: NextRequest) {
     const textLimit = count <= 10 ? 4000 : count <= 20 ? 8000 : count <= 30 ? 12000 : 16000
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.3-70b-versatile',
+      model: 'qwen-qwq-32b',
       max_tokens: count <= 10 ? 3000 : count <= 20 ? 5000 : count <= 30 ? 7000 : 9000,
       messages: [
         {
