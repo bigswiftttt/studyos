@@ -55,16 +55,16 @@ export async function POST(req: NextRequest) {
     const textLimit = count <= 10 ? 4000 : count <= 20 ? 8000 : count <= 30 ? 12000 : 16000
 
     const completion = await groq.chat.completions.create({
-      model: 'model: 'llama- 3.1 - 8b - instant'',
+      model: 'openai/gpt-oss-20b',
       max_tokens: count <= 10 ? 3000 : count <= 20 ? 5000 : count <= 30 ? 7000 : 9000,
       messages: [
-      {
-        role: 'system',
-        content: 'You are a study assistant. Return ONLY valid JSON, no markdown, no explanation.'
-      },
-      {
-        role: 'user',
-        content: `Generate exactly ${count} multiple choice questions from these lecture notes.
+        {
+          role: 'system',
+          content: 'You are a study assistant. Return ONLY valid JSON, no markdown, no explanation.'
+        },
+        {
+          role: 'user',
+          content: `Generate exactly ${count} multiple choice questions from these lecture notes.
 Difficulty level: ${difficultyGuide}
 
 Spread the questions evenly across ALL major topics in the notes. Do not focus on just one section.
@@ -83,34 +83,34 @@ Where "correct" is the index (0-3) of the right answer.
 
 Notes:
 ${text.slice(0, textLimit)}`
-      }
-    ]
+        }
+      ]
     })
 
-  const content = completion.choices[0]?.message?.content || '[]'
-  const cleaned = content.replace(/```json|```/g, '').trim()
+    const content = completion.choices[0]?.message?.content || '[]'
+    const cleaned = content.replace(/```json|```/g, '').trim()
 
-  let mcqs
-  try {
-    mcqs = MCQSchema.parse(JSON.parse(cleaned))
-  } catch (parseErr) {
-    console.error('[api/mcqs] malformed AI response:', cleaned)
+    let mcqs
+    try {
+      mcqs = MCQSchema.parse(JSON.parse(cleaned))
+    } catch (parseErr) {
+      console.error('[api/mcqs] malformed AI response:', cleaned)
+      return NextResponse.json(
+        { error: 'The AI returned an unexpected format. Please try generating again.' },
+        { status: 502 }
+      )
+    }
+
+    return NextResponse.json({ mcqs })
+
+  } catch (error: any) {
+    if (error instanceof FileTooLargeError) {
+      return NextResponse.json({ error: error.message }, { status: 413 })
+    }
+    console.error('[api/mcqs]', error)
     return NextResponse.json(
-      { error: 'The AI returned an unexpected format. Please try generating again.' },
-      { status: 502 }
+      { error: 'Something went wrong generating your quiz. Please try again.' },
+      { status: 500 }
     )
   }
-
-  return NextResponse.json({ mcqs })
-
-} catch (error: any) {
-  if (error instanceof FileTooLargeError) {
-    return NextResponse.json({ error: error.message }, { status: 413 })
-  }
-  console.error('[api/mcqs]', error)
-  return NextResponse.json(
-    { error: 'Something went wrong generating your quiz. Please try again.' },
-    { status: 500 }
-  )
-}
 }

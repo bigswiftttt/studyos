@@ -56,20 +56,20 @@ export async function extractText(file: File): Promise<string> {
     if (mime.startsWith('image/')) {
         const base64 = buffer.toString('base64')
         const completion = await groq.chat.completions.create({
-            model: 'model: 'llama- 3.1 - 8b - instant'',
+            model: 'openai/gpt-oss-20b',
             max_tokens: 2048,
             messages: [
-            {
-                role: 'user',
-                content: [
-                    { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
-                    { type: 'text', text: 'Extract and return all the text content from this image as plain text.' }
-                ] as any
-            }
-        ]
+                {
+                    role: 'user',
+                    content: [
+                        { type: 'image_url', image_url: { url: `data:${mime};base64,${base64}` } },
+                        { type: 'text', text: 'Extract and return all the text content from this image as plain text.' }
+                    ] as any
+                }
+            ]
         })
-    return completion.choices[0]?.message?.content || ''
-}
+        return completion.choices[0]?.message?.content || ''
+    }
 
-throw new Error(`Unsupported file type: ${mime || name}`)
+    throw new Error(`Unsupported file type: ${mime || name}`)
 }

@@ -49,16 +49,16 @@ export async function POST(req: NextRequest) {
         : 'Create a focused summary covering all key points.'
 
     const completion = await groq.chat.completions.create({
-      model: 'model: 'llama- 3.1 - 8b - instant'',
+      model: 'openai/gpt-oss-20b',
       max_tokens: maxTokens,
       messages: [
-      {
-        role: 'system',
-        content: 'You are an expert study assistant who creates clear, structured, and comprehensive study summaries. Always cover every major topic present in the document.'
-      },
-      {
-        role: 'user',
-        content: `Analyze these lecture notes and create a comprehensive study summary. ${sizeInstruction}
+        {
+          role: 'system',
+          content: 'You are an expert study assistant who creates clear, structured, and comprehensive study summaries. Always cover every major topic present in the document.'
+        },
+        {
+          role: 'user',
+          content: `Analyze these lecture notes and create a comprehensive study summary. ${sizeInstruction}
 
 ## Overview
 [2-4 sentence overview of the entire document]
@@ -80,21 +80,21 @@ export async function POST(req: NextRequest) {
 
 Notes:
 ${text.slice(0, textLimit)}`
-      }
-    ]
+        }
+      ]
     })
 
-  const summary = completion.choices[0]?.message?.content || ''
-  return NextResponse.json({ summary })
+    const summary = completion.choices[0]?.message?.content || ''
+    return NextResponse.json({ summary })
 
-} catch (error: any) {
-  if (error instanceof FileTooLargeError) {
-    return NextResponse.json({ error: error.message }, { status: 413 })
+  } catch (error: any) {
+    if (error instanceof FileTooLargeError) {
+      return NextResponse.json({ error: error.message }, { status: 413 })
+    }
+    console.error('[api/summarize]', error)
+    return NextResponse.json(
+      { error: 'Something went wrong generating your summary. Please try again.' },
+      { status: 500 }
+    )
   }
-  console.error('[api/summarize]', error)
-  return NextResponse.json(
-    { error: 'Something went wrong generating your summary. Please try again.' },
-    { status: 500 }
-  )
-}
 }

@@ -77,18 +77,18 @@ Rules:
 - motivationTip must be specific and actionable, not generic`
 
         const completion = await groq.chat.completions.create({
-            model: 'model: 'llama- 3.1 - 8b - instant'',
+            model: 'openai/gpt-oss-20b',
             max_tokens: 2048,
             messages: [
-            {
-                role: 'system',
-                content: 'You are an academic emergency planner. Return ONLY valid JSON, no markdown, no explanation.'
-            },
-            {
-                role: 'user',
-                content: prompt
-            }
-        ]
+                {
+                    role: 'system',
+                    content: 'You are an academic emergency planner. Return ONLY valid JSON, no markdown, no explanation.'
+                },
+                {
+                    role: 'user',
+                    content: prompt
+                }
+            ]
         })
 
     const content = completion.choices[0]?.message?.content || '{}'
